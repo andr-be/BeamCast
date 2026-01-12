@@ -95,7 +95,7 @@ int main(int argc, char* argv[]) {
     std::cout << "  -/=   = Decrease/Increase beam spread angle" << std::endl;
     std::cout << "  ,/.   = Decrease/Increase amplitude threshold" << std::endl;
     std::cout << "  1/2   = Decrease/Increase A-scan range" << std::endl;
-    std::cout << "  3/4   = Decrease/Increase A-scan gain (dB)" << std::endl;
+    std::cout << "  3/4   = Decrease/Increase A-scan gain (0-110 dB)" << std::endl;
     std::cout << "  5     = Toggle A-scan rectification mode (RF/Envelope)" << std::endl;
 
     // Create our renderer wrapper
@@ -371,7 +371,7 @@ int main(int argc, char* argv[]) {
                 }
                 // A-scan gain controls
                 else if (event.key.keysym.sym == SDLK_3) {
-                    ascan.gainDB = std::max(0.0, ascan.gainDB - 2.0);  // 2 dB decrements
+                    ascan.gainDB = std::max(0.0, ascan.gainDB - 2.0);  // 2 dB decrements, min 0 dB
                     std::cout << "A-scan gain: " << ascan.gainDB << " dB (x"
                               << std::fixed << std::setprecision(1) << ascan.getGainLinear() << ")" << std::endl;
                     // Re-generate A-scan with new gain
@@ -380,7 +380,7 @@ int main(int argc, char* argv[]) {
                     }
                 }
                 else if (event.key.keysym.sym == SDLK_4) {
-                    ascan.gainDB = std::min(80.0, ascan.gainDB + 2.0);  // 2 dB increments, max 80 dB
+                    ascan.gainDB = std::min(110.0, ascan.gainDB + 2.0);  // 2 dB increments, max 110 dB (typical UT range)
                     std::cout << "A-scan gain: " << ascan.gainDB << " dB (x"
                               << std::fixed << std::setprecision(1) << ascan.getGainLinear() << ")" << std::endl;
                     // Re-generate A-scan with new gain

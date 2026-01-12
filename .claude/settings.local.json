@@ -21,7 +21,12 @@
       "Bash(gh --version:*)",
       "Bash(git remote add:*)",
       "Bash(git branch:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(start \"BeamCast\" \"BeamCast.exe\":*)",
+      "Bash(powershell -Command \"Get-Process BeamCast -ErrorAction SilentlyContinue | Stop-Process -Force; echo ''Process stopped''\")",
+      "Bash(git tag:*)",
+      "Bash(powershell:*)",
+      "Bash(git reset:*)"
     ]
   }
 }

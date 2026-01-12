@@ -2,6 +2,7 @@
 
 #include "MathTypes.h"
 #include "RayTracer.h"
+#include "PhysicsConstants.h"
 #include <vector>
 #include <algorithm>
 #include <cmath>
@@ -26,7 +27,7 @@ public:
     // Display settings
     double range;        // Maximum time displayed (μs)
     double delay;        // Start time offset (μs)
-    double gainDB;       // Gain in decibels (0-80 dB typical)
+    double gainDB;       // Gain in decibels (0-110 dB, typical UT range)
 
     // Display modes
     enum RectificationMode {
@@ -39,7 +40,7 @@ public:
     AScan()
         : range(200.0)   // 200μs default range - covers longer path lengths
         , delay(0.0)
-        , gainDB(40.0)   // 40 dB default gain (linear multiplier: 100x)
+        , gainDB(0.0)    // 0 dB default (×1.0 linear, no amplification) - user adjusts up
         , rectificationMode(ENVELOPE)
     {}
 
@@ -151,11 +152,20 @@ public:
                                 // Calculate receive angle amplitude scaling
                                 Vec2 transducerNormal = transducer.getDirection();
                                 Vec2 incomingDir = returnDir * -1.0;  // Ray arriving at transducer
-                                double receiveAngleCos = std::abs(incomingDir.dot(transducerNormal));
+                                double receiveAngleCos = incomingDir.dot(transducerNormal);
 
+                                // Only accept echoes hitting transducer face (positive dot product)
+                                // Negative means ray is hitting from behind
+                                if (receiveAngleCos <= 0.0) continue;
+
+                                // Amplitude falls off with angle (cosine response)
                                 constexpr double MIN_ECHO_AMPLITUDE = 0.01;
                                 double gainLinear = getGainLinear();
-                                double echoAmplitude = seg->amplitude * gainLinear * receiveAngleCos;
+
+                                // Apply preamplifier sensitivity (transducer electromechanical efficiency)
+                                // This represents the combined transmit + receive conversion efficiency
+                                double echoAmplitude = seg->amplitude * TransducerConstants::PREAMPLIFIER_SENSITIVITY
+                                                     * gainLinear * receiveAngleCos;
 
                                 // Saturation at 100% FSH (Full Screen Height)
                                 echoAmplitude = std::min(1.0, echoAmplitude);

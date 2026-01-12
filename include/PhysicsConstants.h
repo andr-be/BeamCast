@@ -13,10 +13,12 @@ namespace Physics {
     // This is the first minimum of the Airy diffraction pattern
 
     // Beam Pattern Shaping
-    constexpr double GAUSSIAN_DECAY_FACTOR = 3.0;
+    constexpr double GAUSSIAN_DECAY_FACTOR = 4.0;
     // Controls Gaussian amplitude rolloff from beam center
     // k=2: ~60% amplitude at edges, k=3: ~50%, k=4: ~37%
     // Higher values = more focused beam with sharper dropoff
+    // --
+    // andr-be modified: I've changed the decay factor to 4.0 as part of the 'feel' changes 
 }
 
 namespace CouplingConstants {
@@ -35,6 +37,20 @@ namespace CouplingConstants {
     // Future expansion for Phase 3:
     // constexpr double WATER_IMMERSION_EFFICIENCY = 0.85;  // Immersion testing
     // constexpr double ROUGH_SURFACE_FACTOR = 0.7;         // Surface roughness effect
+}
+
+namespace TransducerConstants {
+    // Transducer Electromechanical Efficiency
+    // Models combined transmit + receive sensitivity before gain stage
+
+    constexpr double PREAMPLIFIER_SENSITIVITY = 0.02;
+    // 25% round-trip efficiency (0.5 transmit × 0.5 receive)
+    // Represents piezoelectric conversion losses both ways
+    // Applied to all echoes before gain stage
+    // Real UT: Transducers have ~50-70% efficiency each direction
+    // Combined: ~25-50% round-trip before amplification
+    // --
+    // andr-be modified: I've scaled this down to 0.02 because it feels better
 }
 
 namespace AttenuationConstants {
@@ -87,16 +103,18 @@ namespace RenderingConstants {
     // Extra clickable area around transducer for easier interaction
 
     // Ray Opacity Scaling (quadratic for emphasis)
-    constexpr uint8_t MIN_RAY_ALPHA = 20;   // 8% min opacity (very faint)
-    constexpr uint8_t MAX_RAY_ALPHA = 200;  // 78% max opacity (bright)
+    constexpr uint8_t MIN_RAY_ALPHA = 1;   // 8% min opacity (very faint)
+    constexpr uint8_t MAX_RAY_ALPHA = 20;  // 78% max opacity (bright)
     // Note: Alpha scales as amplitude² to make weak rays very faint
+    // --
+    // andrbe comment: I can't really see that the alpha works at all; changing it doesn't appear to change much at all! 
 }
 
 namespace AScanDisplay {
     // A-scan visualization parameters
 
-    constexpr double MAX_AMPLITUDE_DISPLAY_FRACTION = 0.9;
-    // Leave 10% margin at top of A-scan display
+    constexpr double MAX_AMPLITUDE_DISPLAY_FRACTION = 0.99;
+    // Leave 1% margin at top of A-scan display
     // Prevents echoes from touching the upper border
 
     constexpr double REFLECTION_DOT_TOLERANCE_DEG = 8.0;
@@ -119,8 +137,8 @@ namespace UIControls {
     constexpr double AMPLITUDE_THRESHOLD_MIN = 0.0;
     constexpr double AMPLITUDE_THRESHOLD_MAX = 1.0;
 
-    constexpr double ASCAN_RANGE_INCREMENT_US = 10.0;
-    constexpr double ASCAN_RANGE_MIN_US = 10.0;
+    constexpr double ASCAN_RANGE_INCREMENT_US = 5.0;
+    constexpr double ASCAN_RANGE_MIN_US = 5.0;
     constexpr double ASCAN_RANGE_MAX_US = 500.0;
 
     constexpr double GEOMETRY_ROTATION_INCREMENT_DEG = 15.0;
