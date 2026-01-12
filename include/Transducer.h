@@ -2,6 +2,7 @@
 
 #include "MathTypes.h"
 #include "Material.h"
+#include "PhysicsConstants.h"
 #include <vector>
 
 namespace BeamCast {
@@ -67,7 +68,7 @@ public:
         }
 
         double wavelength = getWavelength(mat, shear);
-        double sinTheta = 1.22 * wavelength / elementDiameter;
+        double sinTheta = Physics::BEAM_DIVERGENCE_COEFFICIENT * wavelength / elementDiameter;
 
         // Clamp to prevent domain error
         if (sinTheta >= 1.0) return Math::HALF_PI;
@@ -131,9 +132,7 @@ public:
             double normalizedAngle = angle / halfSpreadRadians;  // -1 to +1
 
             // Gaussian beam pattern: exp(-k * angle^2)
-            // k=2 gives ~60% amplitude at edges, k=4 gives ~37% at edges
-            double k = 3.0;  // Tunable parameter for beam shaping
-            double amplitude = std::exp(-k * normalizedAngle * normalizedAngle);
+            double amplitude = std::exp(-Physics::GAUSSIAN_DECAY_FACTOR * normalizedAngle * normalizedAngle);
 
             Vec2 dir = mainDirection.rotated(angle);
             beamRays.emplace_back(dir, amplitude);

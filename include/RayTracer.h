@@ -4,6 +4,7 @@
 #include "Geometry.h"
 #include "Material.h"
 #include "Transducer.h"
+#include "PhysicsConstants.h"
 #include <vector>
 #include <memory>
 #include <limits>
@@ -46,9 +47,9 @@ public:
     Material couplingMedium;               // Medium between transducer and geometry (usually air or water)
 
     RayTracer()
-        : amplitudeThreshold(0.01)  // 1% default threshold
-        , maxTimeOfFlight(200.0)    // 200μs default (matches A-scan default range)
-        , maxBounces(50)             // Increased from 10 since we now have time cutoff
+        : amplitudeThreshold(RayTracingDefaults::DEFAULT_AMPLITUDE_THRESHOLD)
+        , maxTimeOfFlight(RayTracingDefaults::DEFAULT_MAX_TIME_OF_FLIGHT_US)
+        , maxBounces(RayTracingDefaults::DEFAULT_MAX_BOUNCES)
         , couplingMedium(Materials::Air())
     {}
 
@@ -83,13 +84,11 @@ public:
             // Apply coupling efficiency based on contact condition
             if (insideGeometry) {
                 // Good contact: 95% transmission (5% loss at interface)
-                constexpr double COUPLING_EFFICIENCY = 0.95;
-                ray.amplitude *= COUPLING_EFFICIENCY;
+                ray.amplitude *= CouplingConstants::GOOD_CONTACT_EFFICIENCY;
             } else {
                 // Free air: Very poor acoustic coupling (~0.1% typical for air gap)
                 // This simulates the practical reality that UT requires good coupling
-                constexpr double AIR_COUPLING_EFFICIENCY = 0.001;  // 0.1% - most energy reflects at transducer face
-                ray.amplitude *= AIR_COUPLING_EFFICIENCY;
+                ray.amplitude *= CouplingConstants::AIR_GAP_EFFICIENCY;  // 0.1% - most energy reflects at transducer face
             }
 
             traceRay(ray, geometries, 0, 0.0, startingMedium);
@@ -184,8 +183,6 @@ private:
         double transmissionIntensity = 1.0 - reflectionIntensity;
 
         // REFLECTED RAY
-        constexpr double SURFACE_OFFSET_MM = 0.01;     // Small offset to avoid self-intersection
-
         // Spawn reflected ray if it has non-zero amplitude
         // The amplitudeThreshold check happens at the start of traceRay
         if (reflectionIntensity > 0.0) {
@@ -198,7 +195,7 @@ private:
             // If exiting, offset opposite to surfaceNormal (back into material)
             // If entering, offset along surfaceNormal (away from surface)
             Vec2 offsetDir = isExiting ? (surfaceNormal * -1.0) : surfaceNormal;
-            Ray reflectedRay(hit.point + offsetDir * SURFACE_OFFSET_MM, reflectedDir, ray.waveType);
+            Ray reflectedRay(hit.point + offsetDir * RayTracingDefaults::SURFACE_OFFSET_MM, reflectedDir, ray.waveType);
             reflectedRay.amplitude = newAmplitude * std::sqrt(reflectionIntensity);  // Amplitude scales as sqrt(intensity)
             reflectedRay.distance = ray.distance + distToHit;
 
@@ -239,7 +236,7 @@ private:
             Vec2 transmittedDir = tangent * sinTransmitted - surfaceNormal * cosTransmitted;
             transmittedDir = transmittedDir.normalized();
 
-            Ray transmittedRay(hit.point - surfaceNormal * SURFACE_OFFSET_MM, transmittedDir, ray.waveType);
+            Ray transmittedRay(hit.point - surfaceNormal * RayTracingDefaults::SURFACE_OFFSET_MM, transmittedDir, ray.waveType);
             transmittedRay.amplitude = newAmplitude * std::sqrt(transmissionIntensity);
             transmittedRay.distance = ray.distance + distToHit;
 

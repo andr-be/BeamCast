@@ -66,7 +66,7 @@ void Renderer::drawTransducer(const Transducer& transducer, int screenW, int scr
 
     // Draw beam cone outline first (behind everything else)
     // Use distinct yellow/orange color to differentiate from rays
-    double coneLength = 25.0; // mm
+    double coneLength = RenderingConstants::BEAM_CONE_VISUAL_LENGTH_MM;
     double halfSpreadRadians = Math::toRadians(beamSpreadDegrees / 2.0);
 
     Vec2 coneLeft = dir.rotated(-halfSpreadRadians) * coneLength;
@@ -81,7 +81,7 @@ void Renderer::drawTransducer(const Transducer& transducer, int screenW, int scr
     drawCircle(pos, faceRadius, faceColor, screenW, screenH);
 
     // Draw direction indicator (line from center)
-    double indicatorLength = 15.0; // mm
+    double indicatorLength = RenderingConstants::TRANSDUCER_DIRECTION_INDICATOR_LENGTH_MM;
     Vec2 dirEnd = pos + dir * indicatorLength;
     drawLine(pos, dirEnd, Color(255, 220, 120, 255), screenW, screenH);
 
@@ -102,9 +102,8 @@ void Renderer::drawRaySegment(const RaySegment& segment, int screenW, int screen
     // Use quadratic scaling: weak rays (near threshold) are very faint
     // Strong rays (near 100%) are bright and visible
     double amplitudeSquared = segment.amplitude * segment.amplitude;
-    uint8_t minAlpha = 20;   // 8% min opacity (very faint)
-    uint8_t maxAlpha = 200;  // 78% max opacity
-    uint8_t alpha = minAlpha + (uint8_t)(amplitudeSquared * (maxAlpha - minAlpha));
+    uint8_t alpha = RenderingConstants::MIN_RAY_ALPHA +
+        (uint8_t)(amplitudeSquared * (RenderingConstants::MAX_RAY_ALPHA - RenderingConstants::MIN_RAY_ALPHA));
 
     Color rayColor = (segment.waveType == Ray::LONGITUDINAL) ?
         Color(100, 200, 255, alpha) :  // Blue for L-waves
@@ -159,7 +158,7 @@ void Renderer::drawAScan(const AScan& ascan, int x, int y, int width, int height
 
         // Convert amplitude to height (inverted - higher amplitude = taller line from bottom)
         double clampedAmp = std::min(1.0, echo.amplitude);
-        int echoHeight = (int)(clampedAmp * height * 0.9);  // 90% max height
+        int echoHeight = (int)(clampedAmp * height * AScanDisplay::MAX_AMPLITUDE_DISPLAY_FRACTION);
         int echoY = y + height - echoHeight;
 
         // Draw vertical line for echo

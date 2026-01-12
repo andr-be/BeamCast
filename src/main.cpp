@@ -236,10 +236,9 @@ int main(int argc, char* argv[]) {
 
                     if (shiftPressed && lastDraggedGeometryIndex >= 0 && lastDraggedGeometryIndex < (int)geometries.size()) {
                         // Shift+R: Rotate last dragged geometry by 15° increments
-                        constexpr double ROTATION_INCREMENT_DEG = 15.0;
                         auto* rect = dynamic_cast<BeamCast::Rectangle*>(geometries[lastDraggedGeometryIndex].get());
                         if (rect) {
-                            rect->rotation += Math::toRadians(ROTATION_INCREMENT_DEG);
+                            rect->rotation += Math::toRadians(UIControls::GEOMETRY_ROTATION_INCREMENT_DEG);
                             // Normalize to [0, 2π)
                             while (rect->rotation >= 2.0 * M_PI) rect->rotation -= 2.0 * M_PI;
 
@@ -289,7 +288,7 @@ int main(int argc, char* argv[]) {
                 }
                 // Ray count controls
                 else if (event.key.keysym.sym == SDLK_LEFTBRACKET) {
-                    numRays = std::max(4, numRays - 4);
+                    numRays = std::max(UIControls::RAY_COUNT_MIN, numRays - UIControls::RAY_COUNT_INCREMENT);
                     std::cout << "Ray count: " << numRays << std::endl;
                     if (autoSimulate && simulationRun) {
                         rayTracer.traceFromTransducer(transducer, geometries, numRays, beamSpreadAngle);
@@ -297,7 +296,7 @@ int main(int argc, char* argv[]) {
                     }
                 }
                 else if (event.key.keysym.sym == SDLK_RIGHTBRACKET) {
-                    numRays = std::min(512, numRays + 4);  // Allow up to 512 rays
+                    numRays = std::min(UIControls::RAY_COUNT_MAX, numRays + UIControls::RAY_COUNT_INCREMENT);
                     std::cout << "Ray count: " << numRays << std::endl;
                     if (autoSimulate && simulationRun) {
                         rayTracer.traceFromTransducer(transducer, geometries, numRays, beamSpreadAngle);
@@ -306,7 +305,8 @@ int main(int argc, char* argv[]) {
                 }
                 // Beam spread controls
                 else if (event.key.keysym.sym == SDLK_MINUS) {
-                    beamSpreadAngle = std::max(5.0, beamSpreadAngle - 5.0);
+                    beamSpreadAngle = std::max(UIControls::BEAM_SPREAD_MIN_DEG,
+                                              beamSpreadAngle - UIControls::BEAM_SPREAD_INCREMENT_DEG);
                     std::cout << "Beam spread: ±" << beamSpreadAngle << " deg" << std::endl;
                     if (autoSimulate && simulationRun) {
                         rayTracer.traceFromTransducer(transducer, geometries, numRays, beamSpreadAngle);
@@ -314,7 +314,8 @@ int main(int argc, char* argv[]) {
                     }
                 }
                 else if (event.key.keysym.sym == SDLK_EQUALS) {
-                    beamSpreadAngle = std::min(90.0, beamSpreadAngle + 5.0);
+                    beamSpreadAngle = std::min(UIControls::BEAM_SPREAD_MAX_DEG,
+                                              beamSpreadAngle + UIControls::BEAM_SPREAD_INCREMENT_DEG);
                     std::cout << "Beam spread: ±" << beamSpreadAngle << " deg" << std::endl;
                     if (autoSimulate && simulationRun) {
                         rayTracer.traceFromTransducer(transducer, geometries, numRays, beamSpreadAngle);
@@ -323,7 +324,8 @@ int main(int argc, char* argv[]) {
                 }
                 // Amplitude threshold controls
                 else if (event.key.keysym.sym == SDLK_COMMA) {
-                    rayTracer.amplitudeThreshold = std::max(0.0, rayTracer.amplitudeThreshold - 0.01);
+                    rayTracer.amplitudeThreshold = std::max(UIControls::AMPLITUDE_THRESHOLD_MIN,
+                                                           rayTracer.amplitudeThreshold - UIControls::AMPLITUDE_THRESHOLD_INCREMENT);
                     std::cout << "Amplitude threshold: " << (rayTracer.amplitudeThreshold * 100) << "%" << std::endl;
                     if (autoSimulate && simulationRun) {
                         rayTracer.traceFromTransducer(transducer, geometries, numRays, beamSpreadAngle);
@@ -331,7 +333,8 @@ int main(int argc, char* argv[]) {
                     }
                 }
                 else if (event.key.keysym.sym == SDLK_PERIOD) {
-                    rayTracer.amplitudeThreshold = std::min(1.0, rayTracer.amplitudeThreshold + 0.01);
+                    rayTracer.amplitudeThreshold = std::min(UIControls::AMPLITUDE_THRESHOLD_MAX,
+                                                           rayTracer.amplitudeThreshold + UIControls::AMPLITUDE_THRESHOLD_INCREMENT);
                     std::cout << "Amplitude threshold: " << (rayTracer.amplitudeThreshold * 100) << "%" << std::endl;
                     if (autoSimulate && simulationRun) {
                         rayTracer.traceFromTransducer(transducer, geometries, numRays, beamSpreadAngle);
@@ -340,7 +343,8 @@ int main(int argc, char* argv[]) {
                 }
                 // A-scan range controls
                 else if (event.key.keysym.sym == SDLK_1) {
-                    ascan.range = std::max(10.0, ascan.range - 10.0);
+                    ascan.range = std::max(UIControls::ASCAN_RANGE_MIN_US,
+                                          ascan.range - UIControls::ASCAN_RANGE_INCREMENT_US);
                     rayTracer.maxTimeOfFlight = ascan.range;  // Sync ray tracing time window
                     std::cout << "A-scan range: " << ascan.range << " us" << std::endl;
                     // Re-run simulation since time window changed
@@ -351,7 +355,8 @@ int main(int argc, char* argv[]) {
                     }
                 }
                 else if (event.key.keysym.sym == SDLK_2) {
-                    ascan.range = std::min(500.0, ascan.range + 10.0);  // Increased max to 500us
+                    ascan.range = std::min(UIControls::ASCAN_RANGE_MAX_US,
+                                          ascan.range + UIControls::ASCAN_RANGE_INCREMENT_US);
                     rayTracer.maxTimeOfFlight = ascan.range;  // Sync ray tracing time window
                     std::cout << "A-scan range: " << ascan.range << " us" << std::endl;
                     // Re-run simulation since time window changed
@@ -369,7 +374,7 @@ int main(int argc, char* argv[]) {
                     Vec2 mouseWorld = renderer.screenToWorld(mouseScreen, currentWidth, currentHeight);
 
                     // Check if clicking on transducer
-                    double transducerRadius = transducer.elementDiameter / 2.0 + 5.0; // Add some margin
+                    double transducerRadius = transducer.elementDiameter / 2.0 + RenderingConstants::TRANSDUCER_CLICK_MARGIN_MM;
                     if (mouseWorld.distanceTo(transducer.position) < transducerRadius) {
                         isDragging = true;
                         draggingTransducer = true;
