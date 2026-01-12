@@ -87,6 +87,7 @@ int main(int argc, char* argv[]) {
     std::cout << "  DRAG  = Click and drag transducer or geometry" << std::endl;
     std::cout << "  R     = Cycle probe angle (0, 45, 60, 70 deg)" << std::endl;
     std::cout << "  MOUSE WHEEL = Zoom in/out" << std::endl;
+    std::cout << "  MIDDLE MOUSE = Pan view (drag)" << std::endl;
     std::cout << "\nSimulation Controls:" << std::endl;
     std::cout << "  [/]   = Decrease/Increase ray count" << std::endl;
     std::cout << "  -/=   = Decrease/Increase beam spread angle" << std::endl;
@@ -177,6 +178,11 @@ int main(int argc, char* argv[]) {
     int draggingGeometryIndex = -1;
     Vec2 dragOffset(0, 0);
     bool transducerSnapped = false;  // Track if transducer is currently snapped to surface
+
+    // Panning state (middle mouse button)
+    bool isPanning = false;
+    Vec2 panStart(0, 0);
+    Vec2 viewOffsetStart(0, 0);
 
     // Main loop flag
     bool running = true;
@@ -358,6 +364,12 @@ int main(int argc, char* argv[]) {
                         }
                     }
                 }
+                else if (event.button.button == SDL_BUTTON_MIDDLE) {
+                    // Start panning with middle mouse button
+                    isPanning = true;
+                    panStart = Vec2(event.button.x, event.button.y);
+                    viewOffsetStart = renderer.getViewOffset();
+                }
             }
             else if (event.type == SDL_MOUSEBUTTONUP) {
                 if (event.button.button == SDL_BUTTON_LEFT) {
@@ -365,9 +377,21 @@ int main(int argc, char* argv[]) {
                     draggingTransducer = false;
                     draggingGeometryIndex = -1;
                 }
+                else if (event.button.button == SDL_BUTTON_MIDDLE) {
+                    isPanning = false;
+                }
             }
             else if (event.type == SDL_MOUSEMOTION) {
-                if (isDragging) {
+                if (isPanning) {
+                    // Pan the view with middle mouse button
+                    Vec2 mouseCurrent(event.motion.x, event.motion.y);
+                    Vec2 screenDelta = mouseCurrent - panStart;
+                    // Convert screen delta to world delta (invert Y and scale)
+                    Vec2 worldDelta(-screenDelta.x / renderer.getViewScale(),
+                                    screenDelta.y / renderer.getViewScale());
+                    renderer.setViewOffset(viewOffsetStart + worldDelta);
+                }
+                else if (isDragging) {
                     // Get mouse position in world coordinates
                     Vec2 mouseScreen(event.motion.x, event.motion.y);
                     Vec2 mouseWorld = renderer.screenToWorld(mouseScreen, currentWidth, currentHeight);

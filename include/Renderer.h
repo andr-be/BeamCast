@@ -103,6 +103,10 @@ public:
     }
     double getViewScale() const { return viewScale; }
 
+    // Pan controls
+    void setViewOffset(const Vec2& offset) { viewOffset = offset; }
+    Vec2 getViewOffset() const { return viewOffset; }
+
     // Transform world coordinates to screen coordinates
     Vec2 worldToScreen(const Vec2& worldPos, int screenWidth, int screenHeight) const {
         // Center the viewport
