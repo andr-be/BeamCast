@@ -116,15 +116,28 @@ public:
 
             // Only update rotation if not preserving it
             if (!preserveRotation) {
-                // Rotate transducer to be perpendicular to surface
-                // Normal points outward, we want transducer pointing inward
+                // Rotate aperture to be perpendicular to surface
+                // Normal points outward, inward direction is where beam will go
                 Vec2 inwardDir = snap.surfaceNormal * -1.0;
 
-                // Calculate angle so getDirection() returns inwardDir
-                // getDirection() = Vec2(0,1).rotated(angle)
-                // After rotation: (-sin(angle), cos(angle)) = inwardDir
-                // So: sin(angle) = -inwardDir.x, cos(angle) = inwardDir.y
+                // Set aperture orientation to be parallel to surface
+                // Aperture normal should point inward (perpendicular to surface)
                 transducer.angle = std::atan2(-inwardDir.x, inwardDir.y);
+
+                // Calculate refracted beam angle for this material using Snell's law
+                // If wedge angle is non-zero, apply refraction
+                if (std::abs(transducer.wedgeAngle) > 1e-6 && snap.object) {
+                    double refractedAngle = transducer.calculateRefractedAngle(snap.object->material, false);
+                    if (refractedAngle >= 0.0) {
+                        transducer.beamAngle = refractedAngle;
+                    } else {
+                        // Total internal reflection - can't propagate at this angle
+                        transducer.beamAngle = 0.0;
+                    }
+                } else {
+                    // Straight beam probe (no wedge) - beam perpendicular to aperture
+                    transducer.beamAngle = 0.0;
+                }
             }
 
             return true;

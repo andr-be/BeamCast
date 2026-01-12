@@ -248,7 +248,7 @@ public:
         // Initial pulse ringdown (transducer excitation at t=0)
         // This represents the transducer resonance decay - always present
         // Causes the "dead zone" where near-surface echoes are masked
-        double initialPulseTime = time_us - delay;  // Time relative to t=0
+        double initialPulseTime = time_us;  // Absolute time from pulse firing at t=0
         if (initialPulseTime >= 0 && initialPulseTime < pulseDuration_us * 3.0) {
             double alpha = bandwidth * frequency_MHz * 2.0;
             double damping = std::exp(-alpha * initialPulseTime);
@@ -308,7 +308,7 @@ public:
 
         // Initial pulse ringdown (transducer excitation at t=0)
         // Envelope mode shows just the damping curve
-        double initialPulseTime = time_us - delay;  // Time relative to t=0
+        double initialPulseTime = time_us;  // Absolute time from pulse firing at t=0
         if (initialPulseTime >= 0 && initialPulseTime < pulseDuration_us * 3.0) {
             double alpha = bandwidth * frequency_MHz * 2.0;
             double damping = std::exp(-alpha * initialPulseTime);

@@ -18,6 +18,12 @@ public:
     double bandwidth;        // Fractional bandwidth (e.g., 0.5 for 50%)
     double elementDiameter;  // Probe element diameter (mm)
 
+    // Angle beam probe wedge properties
+    Material wedgeMaterial;  // Wedge material (typically acrylic/perspex)
+    double wedgeAngle;       // Physical wedge angle in radians (angle in wedge material)
+                             // This is the "nominal" probe angle (e.g., 45°, 60°, 70°)
+                             // The actual refracted angle in test material depends on Snell's law
+
     // Pulse parameters
     double pulseAmplitude;   // Initial amplitude (0-1)
 
@@ -35,6 +41,8 @@ public:
         , frequency(5.0)     // 5 MHz
         , bandwidth(0.5)     // 50% bandwidth
         , elementDiameter(12.0)  // 12mm diameter
+        , wedgeMaterial(Materials::Perspex())  // Standard acrylic wedge
+        , wedgeAngle(0.0)    // 0° = straight beam probe (no wedge)
         , pulseAmplitude(1.0)
         , beamModel(POINT_SOURCE)
     {}
@@ -46,6 +54,8 @@ public:
         , frequency(freq)
         , bandwidth(0.5)
         , elementDiameter(12.0)
+        , wedgeMaterial(Materials::Perspex())
+        , wedgeAngle(0.0)
         , pulseAmplitude(1.0)
         , beamModel(POINT_SOURCE)
     {}
@@ -137,6 +147,68 @@ public:
         double pulseDuration = getPulseDuration();
         // Distance = velocity × time (half the pulse duration for round trip)
         return velocity * pulseDuration / 2.0;
+    }
+
+    // Calculate refracted beam angle in test material using Snell's law
+    // Returns the refracted angle in radians, or -1.0 if total internal reflection occurs
+    //
+    // Snell's law: sin(θ₁)/c₁ = sin(θ₂)/c₂
+    // Where:
+    //   θ₁ = wedgeAngle (angle in wedge material)
+    //   c₁ = wedge material velocity
+    //   θ₂ = refracted angle in test material (what we calculate)
+    //   c₂ = test material velocity
+    //
+    // Example: 45° probe in steel
+    //   - Wedge: Perspex @ 2.73 mm/μs, θ₁ ≈ 62° (calculated to give 45° in steel)
+    //   - Steel: 5.9 mm/μs
+    //   - sin(θ₂) = sin(62°) × (5.9/2.73) ≈ 0.707 → θ₂ = 45°
+    double calculateRefractedAngle(const Material& testMaterial, bool shear = false) const {
+        // If wedgeAngle is 0, it's a straight beam probe (no refraction needed)
+        if (std::abs(wedgeAngle) < 1e-6) {
+            return 0.0;
+        }
+
+        // Get velocities
+        double wedgeVelocity = wedgeMaterial.velocityLongitudinal;  // Wave in wedge is always longitudinal
+        double testVelocity = shear ? testMaterial.velocityShear : testMaterial.velocityLongitudinal;
+
+        // Snell's law: sin(θ₂) = sin(θ₁) × (c₂/c₁)
+        double sinTheta1 = std::sin(wedgeAngle);
+        double sinTheta2 = sinTheta1 * (testVelocity / wedgeVelocity);
+
+        // Check for total internal reflection
+        if (std::abs(sinTheta2) > 1.0) {
+            return -1.0;  // Total internal reflection - angle not possible
+        }
+
+        return std::asin(sinTheta2);
+    }
+
+    // Set probe to standard angle beam configuration for given target angle in steel
+    // This calculates the required wedge angle to achieve the target angle in steel
+    // Standard angles: 45°, 60°, 70° (for steel)
+    void setAngleBeamProbe(double targetAngleDegrees) {
+        // Target angle in steel (reference material)
+        Material steel = Materials::Steel();
+        double targetAngleRad = Math::toRadians(targetAngleDegrees);
+
+        // Calculate required wedge angle using inverse Snell's law
+        // sin(θ_wedge) = sin(θ_steel) × (c_wedge / c_steel)
+        double sinTargetAngle = std::sin(targetAngleRad);
+        double wedgeVelocity = wedgeMaterial.velocityLongitudinal;
+        double steelVelocity = steel.velocityLongitudinal;
+
+        double sinWedgeAngle = sinTargetAngle * (wedgeVelocity / steelVelocity);
+
+        // Check if achievable
+        if (std::abs(sinWedgeAngle) > 1.0) {
+            // Can't achieve this angle with this wedge material
+            wedgeAngle = 0.0;
+            return;
+        }
+
+        wedgeAngle = std::asin(sinWedgeAngle);
     }
 
     // Ray with initial amplitude and origin based on beam pattern

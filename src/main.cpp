@@ -259,25 +259,44 @@ int main(int argc, char* argv[]) {
                         }
                     } else {
                         // R: Cycle through standard probe angles (0°, 45°, 60°, 70°)
-                        // This changes the BEAM ANGLE, not the aperture orientation
+                        // These are nominal angles in STEEL (reference material)
+                        // The probe configures its wedge angle for steel, then Snell's law
+                        // refracts to the actual angle in whatever material it's placed on
                         currentProbeAngleIndex = (currentProbeAngleIndex + 1) % standardProbeAngles.size();
                         double probeAngleDegrees = standardProbeAngles[currentProbeAngleIndex];
 
-                        // Set beam steering angle relative to aperture normal
-                        // In NDT: 0° = straight beam (perpendicular), 45°/60°/70° = angle beam
-                        // Aperture stays aligned with surface, beam steers at an angle
-                        transducer.beamAngle = Math::toRadians(probeAngleDegrees);
+                        // Configure probe for this angle (calculates wedge angle for steel)
+                        transducer.setAngleBeamProbe(probeAngleDegrees);
 
-                        // Note: Aperture orientation (transducer.angle) is managed by snapping system
-                        // and stays aligned with the surface. We only change the beam direction here.
+                        std::cout << "Probe: " << probeAngleDegrees << " deg (" <<
+                            (probeAngleDegrees == 0.0 ? "straight beam" : "angle beam") << ")" << std::endl;
+
+                        // If snapped to a surface, calculate the actual refracted angle
+                        // for the current material (will differ from steel if different material)
+                        if (transducerSnapped) {
+                            SurfaceSnap snap = snapping.findNearestSurface(transducer.position, geometries);
+                            if (snap.found && snap.object) {
+                                // Calculate refracted angle in this material using Snell's law
+                                double refractedAngle = transducer.calculateRefractedAngle(snap.object->material, false);
+                                if (refractedAngle >= 0.0) {
+                                    transducer.beamAngle = refractedAngle;
+                                    std::cout << "  → Refracted to " << Math::toDegrees(refractedAngle)
+                                             << " deg in " << snap.object->material.name << std::endl;
+                                } else {
+                                    std::cout << "  → Total internal reflection!" << std::endl;
+                                    transducer.beamAngle = 0.0;
+                                }
+                            }
+                        } else {
+                            // Not snapped: assume steel for display purposes
+                            transducer.beamAngle = Math::toRadians(probeAngleDegrees);
+                        }
 
                         if (autoSimulate) {
                             rayTracer.traceFromTransducer(transducer, geometries, numRays, beamSpreadAngle);
                             ascan.generateFromRayPaths(rayTracer.tracedPaths, transducer);
                             simulationRun = true;
                         }
-                        std::cout << "Probe angle: " << probeAngleDegrees << " deg (" <<
-                            (probeAngleDegrees == 0.0 ? "straight beam" : "angle beam") << ")" << std::endl;
                     }
                 }
                 // Ray count controls
