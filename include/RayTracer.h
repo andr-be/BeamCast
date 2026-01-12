@@ -40,13 +40,15 @@ struct RayHit {
 class RayTracer {
 public:
     std::vector<RaySegment> tracedPaths;  // All traced ray segments for visualization
-    double amplitudeThreshold;             // Stop tracing below this amplitude
+    double amplitudeThreshold;             // Stop tracing below this amplitude (0.0 = trace until natural death)
+    double maxTimeOfFlight;                // Maximum time-of-flight (μs) - matches A-scan window
     int maxBounces;                        // Maximum number of bounces
     Material couplingMedium;               // Medium between transducer and geometry (usually air or water)
 
     RayTracer()
-        : amplitudeThreshold(0.01)  // 1% cutoff - better default for practical UT
-        , maxBounces(10)
+        : amplitudeThreshold(0.0)   // 0% = trace everything (let A-scan time window control cutoff)
+        , maxTimeOfFlight(200.0)    // 200μs default (matches A-scan default range)
+        , maxBounces(50)             // Increased from 10 since we now have time cutoff
         , couplingMedium(Materials::Air())
     {}
 
@@ -90,16 +92,17 @@ public:
                 ray.amplitude *= AIR_COUPLING_EFFICIENCY;
             }
 
-            traceRay(ray, geometries, 0, startingMedium);
+            traceRay(ray, geometries, 0, 0.0, startingMedium);
         }
     }
 
 private:
     // Recursively trace a single ray with current material context
     void traceRay(const Ray& ray, const std::vector<std::unique_ptr<GeometryObject>>& geometries,
-                  int bounceCount, const Material& currentMedium) {
-        if (ray.amplitude < amplitudeThreshold || bounceCount >= maxBounces) {
-            return; // Ray too weak or too many bounces
+                  int bounceCount, double cumulativeTimeOfFlight, const Material& currentMedium) {
+        // Stop tracing if: amplitude too low, too many bounces, or exceeded A-scan time window
+        if (ray.amplitude < amplitudeThreshold || bounceCount >= maxBounces || cumulativeTimeOfFlight > maxTimeOfFlight) {
+            return;
         }
 
         // Find nearest intersection
@@ -114,7 +117,12 @@ private:
             double attenuation = std::exp(-currentMedium.attenuationCoeff * MAX_RAY_DISTANCE_MM);
             double endAmplitude = ray.amplitude * attenuation;
 
-            tracedPaths.emplace_back(ray.origin, endPoint, endAmplitude, 0.0, ray.waveType, currentMedium);
+            // Calculate time for this segment
+            double velocity = (ray.waveType == Ray::LONGITUDINAL) ?
+                currentMedium.velocityLongitudinal : currentMedium.velocityShear;
+            double segmentTime = MAX_RAY_DISTANCE_MM / velocity;
+
+            tracedPaths.emplace_back(ray.origin, endPoint, endAmplitude, cumulativeTimeOfFlight + segmentTime, ray.waveType, currentMedium);
             return;
         }
 
@@ -124,14 +132,16 @@ private:
             currentMedium.velocityLongitudinal :
             currentMedium.velocityShear;
 
-        double timeOfFlight = distToHit / velocity;
+        double segmentTimeOfFlight = distToHit / velocity;
+        double newCumulativeTime = cumulativeTimeOfFlight + segmentTimeOfFlight;
 
         // Apply attenuation over distance in current medium
         double attenuation = std::exp(-currentMedium.attenuationCoeff * distToHit);
         double newAmplitude = ray.amplitude * attenuation;
 
         // Add this segment to traced paths (ray travels through currentMedium)
-        tracedPaths.emplace_back(ray.origin, hit.point, newAmplitude, timeOfFlight, ray.waveType, currentMedium);
+        // Store cumulative time so A-scan knows when this echo arrives
+        tracedPaths.emplace_back(ray.origin, hit.point, newAmplitude, newCumulativeTime, ray.waveType, currentMedium);
 
         // Interface physics: reflection and transmission
         // Determine incident angle (angle between ray and surface normal)
@@ -174,10 +184,11 @@ private:
         double transmissionIntensity = 1.0 - reflectionIntensity;
 
         // REFLECTED RAY
-        constexpr double MIN_RAY_COEFFICIENT = 0.01;  // 1% threshold
         constexpr double SURFACE_OFFSET_MM = 0.01;     // Small offset to avoid self-intersection
 
-        if (reflectionIntensity > MIN_RAY_COEFFICIENT) {
+        // Spawn reflected ray if it has non-zero amplitude
+        // The amplitudeThreshold check happens at the start of traceRay
+        if (reflectionIntensity > 0.0) {
             // Reflected direction: r = d - 2(d·n)n
             // IMPORTANT: Use original hit.normal for reflection, NOT flipped surfaceNormal
             // Reflection is a geometric operation that doesn't depend on which side we're on
@@ -192,11 +203,11 @@ private:
             reflectedRay.distance = ray.distance + distToHit;
 
             // Reflected ray stays in incident medium
-            traceRay(reflectedRay, geometries, bounceCount + 1, incidentMedium);
+            traceRay(reflectedRay, geometries, bounceCount + 1, newCumulativeTime, incidentMedium);
         }
 
         // TRANSMITTED RAY (with Snell's law refraction)
-        if (transmissionIntensity > MIN_RAY_COEFFICIENT) {
+        if (transmissionIntensity > 0.0) {
             // Snell's law: n1·sin(θ1) = n2·sin(θ2)
             // For acoustics: n = 1/c (refractive index inversely proportional to velocity)
             double v1 = (ray.waveType == Ray::LONGITUDINAL) ?
@@ -233,7 +244,7 @@ private:
             transmittedRay.distance = ray.distance + distToHit;
 
             // Transmitted ray enters new medium
-            traceRay(transmittedRay, geometries, bounceCount + 1, transmittedMedium);
+            traceRay(transmittedRay, geometries, bounceCount + 1, newCumulativeTime, transmittedMedium);
         }
 
         // TODO Phase 2: Mode conversion (L→S, S→L at interfaces)

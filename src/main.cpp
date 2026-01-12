@@ -85,7 +85,7 @@ int main(int argc, char* argv[]) {
     std::cout << "  A     = Toggle auto-simulate (currently ON)" << std::endl;
     std::cout << "  S     = Toggle snapping (currently ON)" << std::endl;
     std::cout << "  DRAG  = Click and drag transducer or geometry" << std::endl;
-    std::cout << "  R (while dragging transducer) = Cycle probe angle (0, 45, 60, 70 deg)" << std::endl;
+    std::cout << "  R     = Cycle probe angle (0, 45, 60, 70 deg)" << std::endl;
     std::cout << "  MOUSE WHEEL = Zoom in/out" << std::endl;
     std::cout << "\nSimulation Controls:" << std::endl;
     std::cout << "  [/]   = Decrease/Increase ray count" << std::endl;
@@ -222,8 +222,8 @@ int main(int argc, char* argv[]) {
                     snapping.snapEnabled = !snapping.snapEnabled;
                     std::cout << "Snapping: " << (snapping.snapEnabled ? "ON" : "OFF") << std::endl;
                 }
-                else if (event.key.keysym.sym == SDLK_r && draggingTransducer) {
-                    // Cycle through standard probe angles (0°, 45°, 60°, 70°)
+                else if (event.key.keysym.sym == SDLK_r) {
+                    // Cycle through standard probe angles (0°, 45°, 60°, 70°) - works anytime
                     currentProbeAngleIndex = (currentProbeAngleIndex + 1) % standardProbeAngles.size();
                     double probeAngleDegrees = standardProbeAngles[currentProbeAngleIndex];
 
@@ -311,16 +311,24 @@ int main(int argc, char* argv[]) {
                 // A-scan range controls
                 else if (event.key.keysym.sym == SDLK_1) {
                     ascan.range = std::max(10.0, ascan.range - 10.0);
-                    std::cout << "A-scan range: " << ascan.range << " μs" << std::endl;
-                    if (simulationRun) {
+                    rayTracer.maxTimeOfFlight = ascan.range;  // Sync ray tracing time window
+                    std::cout << "A-scan range: " << ascan.range << " us" << std::endl;
+                    // Re-run simulation since time window changed
+                    if (autoSimulate || simulationRun) {
+                        rayTracer.traceFromTransducer(transducer, geometries, numRays, beamSpreadAngle);
                         ascan.generateFromRayPaths(rayTracer.tracedPaths, transducer);
+                        simulationRun = true;
                     }
                 }
                 else if (event.key.keysym.sym == SDLK_2) {
-                    ascan.range = std::min(200.0, ascan.range + 10.0);
-                    std::cout << "A-scan range: " << ascan.range << " μs" << std::endl;
-                    if (simulationRun) {
+                    ascan.range = std::min(500.0, ascan.range + 10.0);  // Increased max to 500us
+                    rayTracer.maxTimeOfFlight = ascan.range;  // Sync ray tracing time window
+                    std::cout << "A-scan range: " << ascan.range << " us" << std::endl;
+                    // Re-run simulation since time window changed
+                    if (autoSimulate || simulationRun) {
+                        rayTracer.traceFromTransducer(transducer, geometries, numRays, beamSpreadAngle);
                         ascan.generateFromRayPaths(rayTracer.tracedPaths, transducer);
+                        simulationRun = true;
                     }
                 }
             }
@@ -473,7 +481,7 @@ int main(int argc, char* argv[]) {
         renderer.drawText("Rays: " + std::to_string(numRays), textX, textY, textCol);
         textY += lineHeight;
 
-        renderer.drawText("Beam: ±" + std::to_string((int)beamSpreadAngle) + " deg", textX, textY, textCol);
+        renderer.drawText("Beam: +/-" + std::to_string((int)beamSpreadAngle) + " deg", textX, textY, textCol);
         textY += lineHeight;
 
         char ampBuf[32];
