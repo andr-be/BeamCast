@@ -6,6 +6,7 @@
 #include <vector>
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 namespace BeamCast {
 
@@ -91,9 +92,6 @@ public:
         }
 
         // For each ray path, check if it returns to transducer aperture
-        const Vec2& transducerPos = transducer.position;
-        double transducerRadius = transducer.elementDiameter / 2.0;
-
         for (const auto& path : rayPaths) {
             if (path.empty()) continue;
 
@@ -120,25 +118,40 @@ public:
 
                     constexpr double REFLECTION_DOT_THRESHOLD = 0.99;  // ~8° tolerance
                     if (dirDot < REFLECTION_DOT_THRESHOLD) {
-                        // This is a reflection point - check if return path intersects transducer
-                        // Extend the reflected ray (nextSeg direction) and check intersection with transducer circle
+                        // This is a reflection point - check if return path intersects transducer aperture
+                        // Transducer aperture is a line segment perpendicular to beam direction
 
                         Vec2 reflectionPoint = seg->end;
                         Vec2 returnDir = dir2;
 
-                        // Ray-circle intersection: check if ray from reflectionPoint in returnDir intersects transducer
-                        Vec2 toTransducer = transducerPos - reflectionPoint;
-                        double a = returnDir.dot(returnDir);  // Should be 1.0 for normalized
-                        double b = -2.0 * returnDir.dot(toTransducer);
-                        double c = toTransducer.dot(toTransducer) - transducerRadius * transducerRadius;
-                        double discriminant = b * b - 4 * a * c;
+                        // Get transducer aperture line segment
+                        Vec2 apertureP1, apertureP2;
+                        transducer.getApertureSegment(apertureP1, apertureP2);
 
-                        if (discriminant >= 0 && b < 0) {  // Ray heading toward circle
-                            double t = (-b - std::sqrt(discriminant)) / (2 * a);
+                        // Ray-line segment intersection
+                        // Ray: P = reflectionPoint + t * returnDir  (t >= 0)
+                        // Segment: Q = apertureP1 + s * (apertureP2 - apertureP1)  (0 <= s <= 1)
+                        Vec2 apertureDir = apertureP2 - apertureP1;
+                        Vec2 originToAperture = apertureP1 - reflectionPoint;
 
-                            if (t > 0) {  // Intersection ahead of reflection point
+                        double cross = returnDir.x * apertureDir.y - returnDir.y * apertureDir.x;
+
+                        bool intersects = false;
+                        double t = 0.0;
+                        Vec2 intersectionPoint;
+
+                        if (std::abs(cross) > 1e-10) {  // Not parallel
+                            t = (originToAperture.x * apertureDir.y - originToAperture.y * apertureDir.x) / cross;
+                            double s = (originToAperture.x * returnDir.y - originToAperture.y * returnDir.x) / cross;
+
+                            if (t >= 0.0 && s >= 0.0 && s <= 1.0) {  // Valid intersection
+                                intersects = true;
+                                intersectionPoint = reflectionPoint + returnDir * t;
+                            }
+                        }
+
+                        if (intersects && t > 0) {  // Intersection ahead of reflection point
                                 // Valid echo - calculate return path TOF
-                                Vec2 intersectionPoint = reflectionPoint + returnDir * t;
                                 double returnDistance = reflectionPoint.distanceTo(intersectionPoint);
 
                                 // Use velocity of the return path segments
@@ -173,7 +186,6 @@ public:
                                 if (echoAmplitude > MIN_ECHO_AMPLITUDE) {
                                     echoes.emplace_back(totalTOF, echoAmplitude, reflectionPoint, seg->waveType);
                                 }
-                            }
                         }
                     }
                 }
@@ -227,11 +239,24 @@ public:
 
     // Synthesize RF waveform at a specific time
     // Returns amplitude in range [-1, +1] for RF mode
-    double synthesizeRFWaveform(double time_us, double frequency_MHz, double bandwidth) const {
+    double synthesizeRFWaveform(double time_us, double frequency_MHz, double bandwidth, uint32_t frameSeed) const {
         double totalAmplitude = 0.0;
 
         // Pulse duration from bandwidth: Δt ≈ 1/Δf where Δf = f × bandwidth
         double pulseDuration_us = 1.0 / (frequency_MHz * bandwidth);
+
+        // Initial pulse ringdown (transducer excitation at t=0)
+        // This represents the transducer resonance decay - always present
+        // Causes the "dead zone" where near-surface echoes are masked
+        double initialPulseTime = time_us - delay;  // Time relative to t=0
+        if (initialPulseTime >= 0 && initialPulseTime < pulseDuration_us * 3.0) {
+            double alpha = bandwidth * frequency_MHz * 2.0;
+            double damping = std::exp(-alpha * initialPulseTime);
+            double phase = 2.0 * M_PI * frequency_MHz * initialPulseTime;
+            double oscillation = std::sin(phase);
+            // Initial pulse at full amplitude (100% FSH before gain)
+            totalAmplitude += damping * oscillation;
+        }
 
         for (const auto& echo : echoes) {
             double timeDelta = time_us - echo.timeOfFlight;
@@ -239,28 +264,57 @@ public:
             // Only process echoes that could contribute at this time
             if (std::abs(timeDelta) > pulseDuration_us * 3.0) continue;  // 3x pulse duration window
 
-            // Damped sinusoidal pulse: A × exp(-α·t) × sin(2πf·t)
+            // Damped sinusoidal pulse: A × exp(-α·|t-t0|) × cos(2πf·(t-t0))
+            // Using cosine so pulse peaks at TOF (not zero-crossing)
             // Damping factor α based on bandwidth (higher bandwidth = more damping)
             double alpha = bandwidth * frequency_MHz * 2.0;  // Empirical damping rate
             double damping = std::exp(-alpha * std::abs(timeDelta));
 
-            // Oscillation at center frequency
+            // Oscillation at center frequency - cosine so amplitude peaks at t=TOF
             double phase = 2.0 * M_PI * frequency_MHz * timeDelta;
-            double oscillation = std::sin(phase);
+            double oscillation = std::cos(phase);
 
             // Combine: amplitude × damping × oscillation
             totalAmplitude += echo.amplitude * damping * oscillation;
         }
+
+        // Add electronic noise (gain-dependent)
+        // Generate pseudo-random noise that changes each frame
+        // Use better hash mixing to avoid saw-wave patterns
+        uint32_t timeSeed = (uint32_t)(time_us * 10000.0);  // Higher precision
+        uint32_t noiseHash = frameSeed * 2654435761u + timeSeed;  // Mix frame and time
+        noiseHash ^= noiseHash >> 16;
+        noiseHash *= 0x85ebca6bu;
+        noiseHash ^= noiseHash >> 13;
+        noiseHash *= 0xc2b2ae35u;
+        noiseHash ^= noiseHash >> 16;
+        double randomValue = (noiseHash & 0xFFFFFF) / 16777216.0;  // [0, 1)
+        double noise = (randomValue - 0.5) * 2.0;  // Convert to [-1, +1]
+
+        // Scale noise by gain level
+        double gainLinear = getGainLinear();
+        double noiseAmplitude = AScanDisplay::BASE_NOISE_AMPLITUDE * std::pow(gainLinear, AScanDisplay::NOISE_GAIN_SCALING);
+        totalAmplitude += noise * noiseAmplitude;
 
         // Clamp to ±1.0
         return std::max(-1.0, std::min(1.0, totalAmplitude));
     }
 
     // Get envelope (rectified) amplitude at a specific time
-    double getEnvelopeAt(double time_us, double frequency_MHz, double bandwidth) const {
+    double getEnvelopeAt(double time_us, double frequency_MHz, double bandwidth, uint32_t frameSeed) const {
         double totalAmplitude = 0.0;
 
         double pulseDuration_us = 1.0 / (frequency_MHz * bandwidth);
+
+        // Initial pulse ringdown (transducer excitation at t=0)
+        // Envelope mode shows just the damping curve
+        double initialPulseTime = time_us - delay;  // Time relative to t=0
+        if (initialPulseTime >= 0 && initialPulseTime < pulseDuration_us * 3.0) {
+            double alpha = bandwidth * frequency_MHz * 2.0;
+            double damping = std::exp(-alpha * initialPulseTime);
+            // Initial pulse at full amplitude (100% FSH before gain)
+            totalAmplitude += damping;
+        }
 
         for (const auto& echo : echoes) {
             double timeDelta = time_us - echo.timeOfFlight;
@@ -273,6 +327,26 @@ public:
 
             totalAmplitude += echo.amplitude * damping;
         }
+
+        // Add electronic noise (gain-dependent)
+        // Generate pseudo-random noise that changes each frame
+        // Use better hash mixing to avoid saw-wave patterns
+        uint32_t timeSeed = (uint32_t)(time_us * 10000.0);  // Higher precision
+        uint32_t noiseHash = frameSeed * 2654435761u + timeSeed;  // Mix frame and time
+        noiseHash ^= noiseHash >> 16;
+        noiseHash *= 0x85ebca6bu;
+        noiseHash ^= noiseHash >> 13;
+        noiseHash *= 0xc2b2ae35u;
+        noiseHash ^= noiseHash >> 16;
+        double randomValue = (noiseHash & 0xFFFFFF) / 16777216.0;  // [0, 1)
+        double noise = (randomValue - 0.5) * 2.0;  // Convert to [-1, +1]
+
+        // Scale noise by gain level
+        double gainLinear = getGainLinear();
+        double noiseAmplitude = AScanDisplay::BASE_NOISE_AMPLITUDE * std::pow(gainLinear, AScanDisplay::NOISE_GAIN_SCALING);
+
+        // For envelope, add absolute value of noise (rectified)
+        totalAmplitude += std::abs(noise) * noiseAmplitude;
 
         // Clamp to [0, 1.0]
         return std::min(1.0, totalAmplitude);

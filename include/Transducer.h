@@ -52,6 +52,30 @@ public:
         return Vec2(0, 1).rotated(angle);
     }
 
+    // Get the transducer element as a line segment (aperture face)
+    // Returns the two endpoints of the line segment perpendicular to beam direction
+    void getApertureSegment(Vec2& p1, Vec2& p2) const {
+        Vec2 dir = getDirection();
+        Vec2 perpendicular = dir.perpendicular();  // Perpendicular to beam direction
+        double halfWidth = elementDiameter / 2.0;
+        p1 = position - perpendicular * halfWidth;
+        p2 = position + perpendicular * halfWidth;
+    }
+
+    // Get left endpoint of aperture (looking along beam direction)
+    Vec2 getApertureLeft() const {
+        Vec2 dir = getDirection();
+        Vec2 perpendicular = dir.perpendicular();
+        return position - perpendicular * (elementDiameter / 2.0);
+    }
+
+    // Get right endpoint of aperture (looking along beam direction)
+    Vec2 getApertureRight() const {
+        Vec2 dir = getDirection();
+        Vec2 perpendicular = dir.perpendicular();
+        return position + perpendicular * (elementDiameter / 2.0);
+    }
+
     // Get wavelength in a given material (λ = c/f)
     double getWavelength(const Material& mat, bool shear = false) const {
         double velocity = shear ? mat.velocityShear : mat.velocityLongitudinal;
@@ -101,19 +125,25 @@ public:
         return velocity * pulseDuration / 2.0;
     }
 
-    // Ray with initial amplitude based on beam pattern
+    // Ray with initial amplitude and origin based on beam pattern
     struct BeamRay {
+        Vec2 origin;       // Starting point on the aperture
         Vec2 direction;
         double amplitude;  // Initial amplitude based on beam directivity (0-1)
 
-        BeamRay(const Vec2& dir, double amp) : direction(dir), amplitude(amp) {}
+        BeamRay(const Vec2& orig, const Vec2& dir, double amp)
+            : origin(orig), direction(dir), amplitude(amp) {}
     };
 
     // Generate initial rays for ray tracing with beam directivity pattern
-    // For point source, generates rays in all directions
-    // For finite aperture, generates rays within beam cone
+    // Rays originate from distributed points along the aperture line segment
     // beamSpreadDegrees: total angular width (e.g., 20° means ±10° from center)
     // Returns rays with amplitude scaled by Gaussian beam pattern
+    //
+    // For realistic beam modeling:
+    // - Rays originate from points distributed along the aperture
+    // - Each ray has a direction within the beam cone
+    // - Amplitude is based on Gaussian beam pattern
     std::vector<BeamRay> generateBeamRays(int numRays, double beamSpreadDegrees) const {
         std::vector<BeamRay> beamRays;
         beamRays.reserve(numRays);
@@ -121,21 +151,37 @@ public:
         Vec2 mainDirection = getDirection();
         double halfSpreadRadians = Math::toRadians(beamSpreadDegrees / 2.0);
 
-        for (int i = 0; i < numRays; i++) {
-            // Distribute rays evenly across beam spread
-            double t = (numRays == 1) ? 0.5 : (double)i / (numRays - 1);
-            double angle = -halfSpreadRadians + 2.0 * halfSpreadRadians * t;
+        // Get aperture endpoints
+        Vec2 apertureLeft, apertureRight;
+        getApertureSegment(apertureLeft, apertureRight);
 
-            // Calculate beam directivity amplitude using Gaussian pattern
-            // Peak at center (angle=0), drops off toward edges
-            // Using normalized angle: 0 at center, ±1 at edges
-            double normalizedAngle = angle / halfSpreadRadians;  // -1 to +1
+        // Distribute rays across both:
+        // 1. Aperture positions (spatial)
+        // 2. Angular directions (beam cone)
+        //
+        // Strategy: Use sqrt(numRays) points along aperture, sqrt(numRays) angles
+        // This gives good coverage in both dimensions
+        int raysPerAperturePoint = std::max(1, (int)std::sqrt((double)numRays));
+        int aperturePoints = std::max(1, numRays / raysPerAperturePoint);
 
-            // Gaussian beam pattern: exp(-k * angle^2)
-            double amplitude = std::exp(-Physics::GAUSSIAN_DECAY_FACTOR * normalizedAngle * normalizedAngle);
+        for (int ap = 0; ap < aperturePoints; ap++) {
+            // Position along aperture (t = 0 is left, t = 1 is right)
+            double apertureT = (aperturePoints == 1) ? 0.5 : (double)ap / (aperturePoints - 1);
+            Vec2 rayOrigin = apertureLeft + (apertureRight - apertureLeft) * apertureT;
 
-            Vec2 dir = mainDirection.rotated(angle);
-            beamRays.emplace_back(dir, amplitude);
+            for (int ar = 0; ar < raysPerAperturePoint; ar++) {
+                // Angular distribution within beam cone
+                double angleT = (raysPerAperturePoint == 1) ? 0.5 : (double)ar / (raysPerAperturePoint - 1);
+                double angle = -halfSpreadRadians + 2.0 * halfSpreadRadians * angleT;
+
+                // Calculate beam directivity amplitude using Gaussian pattern
+                // Peak at center (angle=0), drops off toward edges
+                double normalizedAngle = angle / halfSpreadRadians;  // -1 to +1
+                double amplitude = std::exp(-Physics::GAUSSIAN_DECAY_FACTOR * normalizedAngle * normalizedAngle);
+
+                Vec2 dir = mainDirection.rotated(angle);
+                beamRays.emplace_back(rayOrigin, dir, amplitude);
+            }
         }
 
         return beamRays;

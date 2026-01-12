@@ -254,7 +254,7 @@ public:
     void drawRaySegment(const struct RaySegment& segment, int screenW, int screenH);
 
     // Draw A-scan display
-    void drawAScan(const class AScan& ascan, int x, int y, int width, int height, const class Transducer& transducer);
+    void drawAScan(const class AScan& ascan, int x, int y, int width, int height, const class Transducer& transducer, uint32_t frameSeed);
 
     // Draw text
     void drawText(const std::string& text, int x, int y, const Color& color) {

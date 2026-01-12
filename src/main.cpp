@@ -97,6 +97,7 @@ int main(int argc, char* argv[]) {
     std::cout << "  1/2   = Decrease/Increase A-scan range" << std::endl;
     std::cout << "  3/4   = Decrease/Increase A-scan gain (0-110 dB)" << std::endl;
     std::cout << "  5     = Toggle A-scan rectification mode (RF/Envelope)" << std::endl;
+    std::cout << "  6/7   = Decrease/Increase A-scan delay" << std::endl;
 
     // Create our renderer wrapper
     Renderer renderer(sdlRenderer);
@@ -196,6 +197,9 @@ int main(int argc, char* argv[]) {
 
     int currentWidth = WINDOW_WIDTH;
     int currentHeight = WINDOW_HEIGHT;
+
+    // Frame counter for noise generation (changes every frame)
+    uint32_t frameCounter = 0;
 
     // Main loop
     while (running) {
@@ -348,7 +352,7 @@ int main(int argc, char* argv[]) {
                 else if (event.key.keysym.sym == SDLK_1) {
                     ascan.range = std::max(UIControls::ASCAN_RANGE_MIN_US,
                                           ascan.range - UIControls::ASCAN_RANGE_INCREMENT_US);
-                    rayTracer.maxTimeOfFlight = ascan.range;  // Sync ray tracing time window
+                    rayTracer.maxTimeOfFlight = ascan.delay + ascan.range;  // Sync ray tracing time window
                     std::cout << "A-scan range: " << ascan.range << " us" << std::endl;
                     // Re-run simulation since time window changed
                     if (autoSimulate || simulationRun) {
@@ -360,8 +364,33 @@ int main(int argc, char* argv[]) {
                 else if (event.key.keysym.sym == SDLK_2) {
                     ascan.range = std::min(UIControls::ASCAN_RANGE_MAX_US,
                                           ascan.range + UIControls::ASCAN_RANGE_INCREMENT_US);
-                    rayTracer.maxTimeOfFlight = ascan.range;  // Sync ray tracing time window
+                    rayTracer.maxTimeOfFlight = ascan.delay + ascan.range;  // Sync ray tracing time window
                     std::cout << "A-scan range: " << ascan.range << " us" << std::endl;
+                    // Re-run simulation since time window changed
+                    if (autoSimulate || simulationRun) {
+                        rayTracer.traceFromTransducer(transducer, geometries, numRays, beamSpreadAngle);
+                        ascan.generateFromRayPaths(rayTracer.tracedPaths, transducer);
+                        simulationRun = true;
+                    }
+                }
+                // A-scan delay controls
+                else if (event.key.keysym.sym == SDLK_6) {
+                    ascan.delay = std::max(UIControls::ASCAN_DELAY_MIN_US,
+                                          ascan.delay - UIControls::ASCAN_DELAY_INCREMENT_US);
+                    rayTracer.maxTimeOfFlight = ascan.delay + ascan.range;  // Sync ray tracing time window
+                    std::cout << "A-scan delay: " << ascan.delay << " us" << std::endl;
+                    // Re-run simulation since time window changed
+                    if (autoSimulate || simulationRun) {
+                        rayTracer.traceFromTransducer(transducer, geometries, numRays, beamSpreadAngle);
+                        ascan.generateFromRayPaths(rayTracer.tracedPaths, transducer);
+                        simulationRun = true;
+                    }
+                }
+                else if (event.key.keysym.sym == SDLK_7) {
+                    ascan.delay = std::min(UIControls::ASCAN_DELAY_MAX_US,
+                                          ascan.delay + UIControls::ASCAN_DELAY_INCREMENT_US);
+                    rayTracer.maxTimeOfFlight = ascan.delay + ascan.range;  // Sync ray tracing time window
+                    std::cout << "A-scan delay: " << ascan.delay << " us" << std::endl;
                     // Re-run simulation since time window changed
                     if (autoSimulate || simulationRun) {
                         rayTracer.traceFromTransducer(transducer, geometries, numRays, beamSpreadAngle);
@@ -545,7 +574,7 @@ int main(int argc, char* argv[]) {
         int ascanY = 20;
         int ascanHeight = currentHeight / 2;
         if (simulationRun) {
-            renderer.drawAScan(ascan, ascanX, ascanY, ascanWidth, ascanHeight, transducer);
+            renderer.drawAScan(ascan, ascanX, ascanY, ascanWidth, ascanHeight, transducer, frameCounter);
         }
 
         // Draw parameter display (bottom-left corner)
@@ -591,6 +620,9 @@ int main(int argc, char* argv[]) {
 
         // Present
         renderer.present();
+
+        // Increment frame counter for noise variation
+        frameCounter++;
     }
 
     // Cleanup

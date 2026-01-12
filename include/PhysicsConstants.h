@@ -120,6 +120,17 @@ namespace AScanDisplay {
     constexpr double REFLECTION_DOT_TOLERANCE_DEG = 8.0;
     // Minimum angle change to detect a reflection echo
     // cos(8°) ≈ 0.99 - rays changing direction by >8° are reflections
+
+    // Electronic noise parameters
+    constexpr double BASE_NOISE_AMPLITUDE = 0.02;
+    // Baseline noise floor at 0 dB gain (5% amplitude)
+    // Represents thermal/electronic noise in amplifier circuits
+    // This is much higher than real equipment to make noise visible at low gains
+
+    constexpr double NOISE_GAIN_SCALING = 0.5;
+    // Noise scaling exponent for gain dependency
+    // noiseAmplitude = baseNoise × (gainLinear ^ NOISE_GAIN_SCALING)
+    // 0.5 = square root scaling (noise power scales linearly with gain)
 }
 
 namespace UIControls {
@@ -140,6 +151,10 @@ namespace UIControls {
     constexpr double ASCAN_RANGE_INCREMENT_US = 5.0;
     constexpr double ASCAN_RANGE_MIN_US = 5.0;
     constexpr double ASCAN_RANGE_MAX_US = 500.0;
+
+    constexpr double ASCAN_DELAY_INCREMENT_US = 1.0;
+    constexpr double ASCAN_DELAY_MIN_US = 0.0;
+    constexpr double ASCAN_DELAY_MAX_US = 100.0;
 
     constexpr double GEOMETRY_ROTATION_INCREMENT_DEG = 15.0;
 }

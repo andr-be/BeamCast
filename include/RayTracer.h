@@ -78,7 +78,8 @@ public:
 
         // Trace each ray with initial amplitude from beam pattern
         for (const auto& beamRay : beamRays) {
-            Ray ray(transducer.position, beamRay.direction, Ray::LONGITUDINAL);
+            // Rays now originate from distributed points along the aperture
+            Ray ray(beamRay.origin, beamRay.direction, Ray::LONGITUDINAL);
             ray.amplitude = beamRay.amplitude;  // Set initial amplitude based on beam directivity
 
             // Apply coupling efficiency based on contact condition

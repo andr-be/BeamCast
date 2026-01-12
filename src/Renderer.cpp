@@ -58,11 +58,13 @@ void Renderer::drawTransducer(const Transducer& transducer, int screenW, int scr
     Vec2 dir = transducer.getDirection();
 
     // Transducer visualization:
-    // - Circle for element face
-    // - Line showing direction
+    // - Line segment for aperture face (perpendicular to beam direction)
+    // - Direction indicator showing beam axis
     // - Beam cone showing beam spread
 
-    double faceRadius = transducer.elementDiameter / 2.0;
+    // Get aperture line segment endpoints
+    Vec2 apertureLeft, apertureRight;
+    transducer.getApertureSegment(apertureLeft, apertureRight);
 
     // Draw beam cone outline first (behind everything else)
     // Use distinct yellow/orange color to differentiate from rays
@@ -76,9 +78,14 @@ void Renderer::drawTransducer(const Transducer& transducer, int screenW, int scr
     drawLine(pos, pos + coneLeft, coneColor, screenW, screenH);
     drawLine(pos, pos + coneRight, coneColor, screenW, screenH);
 
-    // Draw element face
+    // Draw element face as thick line segment
     Color faceColor = Color(255, 180, 100, 255);  // Orange-ish
-    drawCircle(pos, faceRadius, faceColor, screenW, screenH);
+
+    // Draw the aperture line segment multiple times for thickness
+    for (int offset = -2; offset <= 2; offset++) {
+        Vec2 offsetVec = dir * offset * 0.3;  // Small offset perpendicular to aperture
+        drawLine(apertureLeft + offsetVec, apertureRight + offsetVec, faceColor, screenW, screenH);
+    }
 
     // Draw direction indicator (line from center)
     double indicatorLength = RenderingConstants::TRANSDUCER_DIRECTION_INDICATOR_LENGTH_MM;
@@ -112,7 +119,7 @@ void Renderer::drawRaySegment(const RaySegment& segment, int screenW, int screen
     drawLine(segment.start, segment.end, rayColor, screenW, screenH);
 }
 
-void Renderer::drawAScan(const AScan& ascan, int x, int y, int width, int height, const class Transducer& transducer) {
+void Renderer::drawAScan(const AScan& ascan, int x, int y, int width, int height, const class Transducer& transducer, uint32_t frameSeed) {
     // Draw A-scan panel background
     Color panelBg = Color(40, 40, 45, 255);
     SDL_SetRenderDrawColor(sdlRenderer, panelBg.r, panelBg.g, panelBg.b, panelBg.a);
@@ -161,7 +168,7 @@ void Renderer::drawAScan(const AScan& ascan, int x, int y, int width, int height
             double time_us = ascan.delay + normalizedX * ascan.range;
 
             // Synthesize RF waveform
-            double amplitude = ascan.synthesizeRFWaveform(time_us, transducer.frequency, transducer.bandwidth);
+            double amplitude = ascan.synthesizeRFWaveform(time_us, transducer.frequency, transducer.bandwidth, frameSeed);
 
             // Convert amplitude to screen Y (±50% of height from baseline)
             int amplitudeHeight = (int)(amplitude * height * 0.5 * AScanDisplay::MAX_AMPLITUDE_DISPLAY_FRACTION);
@@ -189,7 +196,7 @@ void Renderer::drawAScan(const AScan& ascan, int x, int y, int width, int height
             double time_us = ascan.delay + normalizedX * ascan.range;
 
             // Get envelope amplitude
-            double amplitude = ascan.getEnvelopeAt(time_us, transducer.frequency, transducer.bandwidth);
+            double amplitude = ascan.getEnvelopeAt(time_us, transducer.frequency, transducer.bandwidth, frameSeed);
 
             // Check for saturation
             bool isSaturated = (amplitude >= 0.99);
