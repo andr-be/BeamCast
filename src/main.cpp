@@ -595,55 +595,8 @@ int main(int argc, char* argv[]) {
         // Draw transducer (on top of rays)
         renderer.drawTransducer(transducer, currentWidth, currentHeight, beamSpreadAngle, transducerSnapped);
 
-        // Draw A-scan panel (right side of screen)
-        int ascanWidth = currentWidth / 3;  // 1/3 of screen
-        int ascanX = currentWidth - ascanWidth;
-        int ascanY = 20;
-        int ascanHeight = currentHeight / 2;
-        if (simulationRun) {
-            renderer.drawAScan(ascan, ascanX, ascanY, ascanWidth, ascanHeight, transducer, frameCounter);
-        }
-
-        // Draw parameter display (bottom-left corner)
-        Color textBg = Color(30, 30, 35, 200);
-        SDL_SetRenderDrawColor(sdlRenderer, textBg.r, textBg.g, textBg.b, textBg.a);
-        SDL_Rect paramBox = {10, currentHeight - 150, 250, 140};
-        SDL_RenderFillRect(sdlRenderer, &paramBox);
-
-        // Draw border
-        Color borderCol = Color(100, 100, 100, 255);
-        SDL_SetRenderDrawColor(sdlRenderer, borderCol.r, borderCol.g, borderCol.b, borderCol.a);
-        SDL_RenderDrawRect(sdlRenderer, &paramBox);
-
-        // Draw parameter text
-        Color textCol = Color(220, 220, 220, 255);
-        int textX = 20;
-        int textY = currentHeight - 145;
-        int lineHeight = 18;
-
-        renderer.drawText("PROBE & BEAM PARAMETERS", textX, textY, Color(150, 200, 255, 255));
-        textY += lineHeight + 3;
-
-        renderer.drawText("Rays: " + std::to_string(numRays), textX, textY, textCol);
-        textY += lineHeight;
-
-        renderer.drawText("Beam: +/-" + std::to_string((int)beamSpreadAngle) + " deg", textX, textY, textCol);
-        textY += lineHeight;
-
-        char ampBuf[32];
-        std::snprintf(ampBuf, sizeof(ampBuf), "Threshold: %.0f%%", rayTracer.amplitudeThreshold * 100);
-        renderer.drawText(ampBuf, textX, textY, textCol);
-        textY += lineHeight;
-
-        char rangeBuf[32];
-        std::snprintf(rangeBuf, sizeof(rangeBuf), "A-scan: %.0f us", ascan.range);
-        renderer.drawText(rangeBuf, textX, textY, textCol);
-        textY += lineHeight;
-
-        renderer.drawText("Freq: " + std::to_string((int)transducer.frequency) + " MHz", textX, textY, textCol);
-        textY += lineHeight;
-
-        renderer.drawText(std::string("Snap: ") + (snapping.snapEnabled ? "ON" : "OFF"), textX, textY, textCol);
+        // Draw BeamCast version label (top-left, semi-transparent)
+        renderer.drawText("BeamCast v0.2.0", 20, 20, Color(255, 255, 255, 180), 20);
 
         // Start ImGui frame
         ImGui_ImplSDLRenderer2_NewFrame();
@@ -746,8 +699,53 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        // A-scan section
-        if (ImGui::CollapsingHeader("A-Scan Display", ImGuiTreeNodeFlags_DefaultOpen)) {
+        // Controls section
+        if (ImGui::CollapsingHeader("Controls", ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::Checkbox("Auto-Simulate", &autoSimulate);
+            ImGui::Checkbox("Snapping", &snapping.snapEnabled);
+
+            if (ImGui::Button("Run Simulation")) {
+                rayTracer.traceFromTransducer(transducer, geometries, numRays, beamSpreadAngle);
+                ascan.generateFromRayPaths(rayTracer.tracedPaths, transducer);
+                simulationRun = true;
+            }
+        }
+
+        ImGui::End();
+
+        // Create right A-Scan panel
+        ImGui::SetNextWindowPos(ImVec2(currentWidth - 420, 10), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(410, 600), ImGuiCond_FirstUseEver);
+        ImGui::Begin("A-Scan Display", nullptr, ImGuiWindowFlags_NoCollapse);
+
+        // Store rendering info for later (after ImGui render)
+        int ascanRenderX = 0, ascanRenderY = 0, ascanRenderW = 0, ascanRenderH = 0;
+        bool shouldRenderAScan = false;
+
+        if (simulationRun) {
+            // Get ImGui window content region for A-scan rendering
+            ImVec2 contentRegion = ImGui::GetContentRegionAvail();
+            ascanRenderW = (int)contentRegion.x - 10;  // Leave some margin
+            ascanRenderH = (int)(contentRegion.y * 0.55f);  // 55% for display, 45% for controls
+
+            // Get absolute screen position for SDL rendering
+            ImVec2 cursorPos = ImGui::GetCursorScreenPos();
+            ascanRenderX = (int)cursorPos.x;
+            ascanRenderY = (int)cursorPos.y;
+            shouldRenderAScan = true;
+
+            // Reserve space for the A-scan display
+            ImGui::Dummy(ImVec2((float)ascanRenderW, (float)ascanRenderH));
+        } else {
+            ImGui::Text("Run simulation to see A-Scan");
+            ImGui::Text("");
+            ImGui::TextWrapped("Configure transducer parameters and click 'Run Simulation' or enable 'Auto-Simulate' in the Control Panel.");
+        }
+
+        // A-Scan controls section
+        ImGui::Separator();
+        ImGui::Spacing();
+        if (ImGui::CollapsingHeader("A-Scan Controls", ImGuiTreeNodeFlags_DefaultOpen)) {
             float range = (float)ascan.range;
             if (ImGui::SliderFloat("Range (us)", &range, 10.0f, 500.0f, "%.1f")) {
                 ascan.range = range;
@@ -774,23 +772,17 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        // Controls section
-        if (ImGui::CollapsingHeader("Controls", ImGuiTreeNodeFlags_DefaultOpen)) {
-            ImGui::Checkbox("Auto-Simulate", &autoSimulate);
-            ImGui::Checkbox("Snapping", &snapping.snapEnabled);
-
-            if (ImGui::Button("Run Simulation")) {
-                rayTracer.traceFromTransducer(transducer, geometries, numRays, beamSpreadAngle);
-                ascan.generateFromRayPaths(rayTracer.tracedPaths, transducer);
-                simulationRun = true;
-            }
-        }
-
         ImGui::End();
 
         // Render ImGui
         ImGui::Render();
         ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData());
+
+        // Render A-Scan on top of ImGui
+        if (shouldRenderAScan) {
+            renderer.drawAScan(ascan, ascanRenderX, ascanRenderY,
+                              ascanRenderW, ascanRenderH, transducer, frameCounter);
+        }
 
         // Present
         renderer.present();

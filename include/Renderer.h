@@ -256,12 +256,33 @@ public:
     // Draw A-scan display
     void drawAScan(const class AScan& ascan, int x, int y, int width, int height, const class Transducer& transducer, uint32_t frameSeed);
 
-    // Draw text
+    // Draw text with default font
     void drawText(const std::string& text, int x, int y, const Color& color) {
         if (!font) return;
 
         SDL_Color sdlColor = {color.r, color.g, color.b, color.a};
         SDL_Surface* surface = TTF_RenderText_Blended(font, text.c_str(), sdlColor);
+        if (!surface) return;
+
+        SDL_Texture* texture = SDL_CreateTextureFromSurface(sdlRenderer, surface);
+        if (texture) {
+            SDL_Rect destRect = {x, y, surface->w, surface->h};
+            SDL_RenderCopy(sdlRenderer, texture, nullptr, &destRect);
+            SDL_DestroyTexture(texture);
+        }
+        SDL_FreeSurface(surface);
+    }
+
+    // Draw text with custom font size
+    void drawText(const std::string& text, int x, int y, const Color& color, int fontSize) {
+        // Load a font at the specified size temporarily
+        TTF_Font* customFont = TTF_OpenFont("C:/Windows/Fonts/arial.ttf", fontSize);
+        if (!customFont) return;
+
+        SDL_Color sdlColor = {color.r, color.g, color.b, color.a};
+        SDL_Surface* surface = TTF_RenderText_Blended(customFont, text.c_str(), sdlColor);
+        TTF_CloseFont(customFont);
+
         if (!surface) return;
 
         SDL_Texture* texture = SDL_CreateTextureFromSurface(sdlRenderer, surface);
