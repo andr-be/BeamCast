@@ -112,7 +112,7 @@ void Renderer::drawRaySegment(const RaySegment& segment, int screenW, int screen
     drawLine(segment.start, segment.end, rayColor, screenW, screenH);
 }
 
-void Renderer::drawAScan(const AScan& ascan, int x, int y, int width, int height) {
+void Renderer::drawAScan(const AScan& ascan, int x, int y, int width, int height, const class Transducer& transducer) {
     // Draw A-scan panel background
     Color panelBg = Color(40, 40, 45, 255);
     SDL_SetRenderDrawColor(sdlRenderer, panelBg.r, panelBg.g, panelBg.b, panelBg.a);
@@ -140,31 +140,76 @@ void Renderer::drawAScan(const AScan& ascan, int x, int y, int width, int height
         SDL_RenderDrawLine(sdlRenderer, x, lineY, x + width, lineY);
     }
 
-    // Draw baseline (0% amplitude)
+    // Draw baseline (center for RF mode, bottom for envelope modes)
+    int baselineY = (ascan.rectificationMode == AScan::RF_MODE) ? (y + height / 2) : (y + height - 1);
     Color baselineColor = Color(100, 100, 100, 255);
     SDL_SetRenderDrawColor(sdlRenderer, baselineColor.r, baselineColor.g, baselineColor.b, baselineColor.a);
-    SDL_RenderDrawLine(sdlRenderer, x, y + height - 1, x + width, y + height - 1);
+    SDL_RenderDrawLine(sdlRenderer, x, baselineY, x + width, baselineY);
 
-    // Draw echoes as vertical lines (envelope mode)
-    for (const auto& echo : ascan.echoes) {
-        // Convert time to X position
-        double normalizedTime = (echo.timeOfFlight - ascan.delay) / ascan.range;
-        if (normalizedTime < 0.0 || normalizedTime > 1.0) continue;
+    // Draw waveform based on rectification mode
+    if (ascan.rectificationMode == AScan::RF_MODE) {
+        // RF Mode: Full oscillating waveform (±100%)
+        Color waveformColor = Color(100, 255, 100, 255);  // Green
+        SDL_SetRenderDrawColor(sdlRenderer, waveformColor.r, waveformColor.g, waveformColor.b, waveformColor.a);
 
-        int echoX = x + (int)(normalizedTime * width);
+        int prevScreenX = -1;
+        int prevScreenY = baselineY;
 
-        // Convert amplitude to height (inverted - higher amplitude = taller line from bottom)
-        double clampedAmp = std::min(1.0, echo.amplitude);
-        int echoHeight = (int)(clampedAmp * height * AScanDisplay::MAX_AMPLITUDE_DISPLAY_FRACTION);
-        int echoY = y + height - echoHeight;
+        for (int screenX = 0; screenX < width; screenX++) {
+            // Convert screen X to time
+            double normalizedX = (double)screenX / width;
+            double time_us = ascan.delay + normalizedX * ascan.range;
 
-        // Color: Green for normal echoes, Red for saturated (100% FSH)
-        bool isSaturated = (echo.amplitude >= 0.99);  // Consider 99%+ as saturated
-        Color echoColor = isSaturated ? Color(255, 100, 100, 255) : Color(100, 255, 100, 255);
-        SDL_SetRenderDrawColor(sdlRenderer, echoColor.r, echoColor.g, echoColor.b, echoColor.a);
+            // Synthesize RF waveform
+            double amplitude = ascan.synthesizeRFWaveform(time_us, transducer.frequency, transducer.bandwidth);
 
-        // Draw vertical line for echo
-        SDL_RenderDrawLine(sdlRenderer, echoX, y + height - 1, echoX, echoY);
+            // Convert amplitude to screen Y (±50% of height from baseline)
+            int amplitudeHeight = (int)(amplitude * height * 0.5 * AScanDisplay::MAX_AMPLITUDE_DISPLAY_FRACTION);
+            int screenY = baselineY - amplitudeHeight;  // Negative amp goes down, positive goes up
+
+            // Draw line segment
+            if (prevScreenX >= 0) {
+                SDL_RenderDrawLine(sdlRenderer, x + prevScreenX, prevScreenY, x + screenX, screenY);
+            }
+
+            prevScreenX = screenX;
+            prevScreenY = screenY;
+        }
+    } else {
+        // ENVELOPE or HALF_WAVE: Rectified modes
+        Color waveformColor = Color(100, 255, 100, 255);  // Green
+        SDL_SetRenderDrawColor(sdlRenderer, waveformColor.r, waveformColor.g, waveformColor.b, waveformColor.a);
+
+        int prevScreenX = -1;
+        int prevScreenY = baselineY;
+
+        for (int screenX = 0; screenX < width; screenX++) {
+            // Convert screen X to time
+            double normalizedX = (double)screenX / width;
+            double time_us = ascan.delay + normalizedX * ascan.range;
+
+            // Get envelope amplitude
+            double amplitude = ascan.getEnvelopeAt(time_us, transducer.frequency, transducer.bandwidth);
+
+            // Check for saturation
+            bool isSaturated = (amplitude >= 0.99);
+
+            // Convert amplitude to height
+            int amplitudeHeight = (int)(amplitude * height * AScanDisplay::MAX_AMPLITUDE_DISPLAY_FRACTION);
+            int screenY = baselineY - amplitudeHeight;  // Draw upward from baseline
+
+            // Color based on saturation
+            Color color = isSaturated ? Color(255, 100, 100, 255) : Color(100, 255, 100, 255);
+            SDL_SetRenderDrawColor(sdlRenderer, color.r, color.g, color.b, color.a);
+
+            // Draw line segment
+            if (prevScreenX >= 0) {
+                SDL_RenderDrawLine(sdlRenderer, x + prevScreenX, prevScreenY, x + screenX, screenY);
+            }
+
+            prevScreenX = screenX;
+            prevScreenY = screenY;
+        }
     }
 
     // Draw axis labels (simple text placeholders - proper text rendering would need SDL_ttf)

@@ -214,6 +214,59 @@ public:
 
         return nearest;
     }
+
+    // Synthesize RF waveform at a specific time
+    // Returns amplitude in range [-1, +1] for RF mode
+    double synthesizeRFWaveform(double time_us, double frequency_MHz, double bandwidth) const {
+        double totalAmplitude = 0.0;
+
+        // Pulse duration from bandwidth: Δt ≈ 1/Δf where Δf = f × bandwidth
+        double pulseDuration_us = 1.0 / (frequency_MHz * bandwidth);
+
+        for (const auto& echo : echoes) {
+            double timeDelta = time_us - echo.timeOfFlight;
+
+            // Only process echoes that could contribute at this time
+            if (std::abs(timeDelta) > pulseDuration_us * 3.0) continue;  // 3x pulse duration window
+
+            // Damped sinusoidal pulse: A × exp(-α·t) × sin(2πf·t)
+            // Damping factor α based on bandwidth (higher bandwidth = more damping)
+            double alpha = bandwidth * frequency_MHz * 2.0;  // Empirical damping rate
+            double damping = std::exp(-alpha * std::abs(timeDelta));
+
+            // Oscillation at center frequency
+            double phase = 2.0 * M_PI * frequency_MHz * timeDelta;
+            double oscillation = std::sin(phase);
+
+            // Combine: amplitude × damping × oscillation
+            totalAmplitude += echo.amplitude * damping * oscillation;
+        }
+
+        // Clamp to ±1.0
+        return std::max(-1.0, std::min(1.0, totalAmplitude));
+    }
+
+    // Get envelope (rectified) amplitude at a specific time
+    double getEnvelopeAt(double time_us, double frequency_MHz, double bandwidth) const {
+        double totalAmplitude = 0.0;
+
+        double pulseDuration_us = 1.0 / (frequency_MHz * bandwidth);
+
+        for (const auto& echo : echoes) {
+            double timeDelta = time_us - echo.timeOfFlight;
+
+            if (std::abs(timeDelta) > pulseDuration_us * 3.0) continue;
+
+            // Envelope is just the damping curve without oscillation
+            double alpha = bandwidth * frequency_MHz * 2.0;
+            double damping = std::exp(-alpha * std::abs(timeDelta));
+
+            totalAmplitude += echo.amplitude * damping;
+        }
+
+        // Clamp to [0, 1.0]
+        return std::min(1.0, totalAmplitude);
+    }
 };
 
 } // namespace BeamCast

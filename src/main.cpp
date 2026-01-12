@@ -96,6 +96,7 @@ int main(int argc, char* argv[]) {
     std::cout << "  ,/.   = Decrease/Increase amplitude threshold" << std::endl;
     std::cout << "  1/2   = Decrease/Increase A-scan range" << std::endl;
     std::cout << "  3/4   = Decrease/Increase A-scan gain (dB)" << std::endl;
+    std::cout << "  5     = Toggle A-scan rectification mode (RF/Envelope)" << std::endl;
 
     // Create our renderer wrapper
     Renderer renderer(sdlRenderer);
@@ -387,6 +388,17 @@ int main(int argc, char* argv[]) {
                         ascan.generateFromRayPaths(rayTracer.tracedPaths, transducer);
                     }
                 }
+                // Rectification mode toggle
+                else if (event.key.keysym.sym == SDLK_5) {
+                    // Cycle through modes: ENVELOPE → RF_MODE → ENVELOPE
+                    if (ascan.rectificationMode == AScan::ENVELOPE) {
+                        ascan.rectificationMode = AScan::RF_MODE;
+                        std::cout << "A-scan mode: RF (oscillating waveform)" << std::endl;
+                    } else {
+                        ascan.rectificationMode = AScan::ENVELOPE;
+                        std::cout << "A-scan mode: ENVELOPE (rectified)" << std::endl;
+                    }
+                }
             }
             else if (event.type == SDL_MOUSEBUTTONDOWN) {
                 if (event.button.button == SDL_BUTTON_LEFT) {
@@ -533,7 +545,7 @@ int main(int argc, char* argv[]) {
         int ascanY = 20;
         int ascanHeight = currentHeight / 2;
         if (simulationRun) {
-            renderer.drawAScan(ascan, ascanX, ascanY, ascanWidth, ascanHeight);
+            renderer.drawAScan(ascan, ascanX, ascanY, ascanWidth, ascanHeight, transducer);
         }
 
         // Draw parameter display (bottom-left corner)
