@@ -26,7 +26,8 @@
       "Bash(powershell -Command \"Get-Process BeamCast -ErrorAction SilentlyContinue | Stop-Process -Force; echo ''Process stopped''\")",
       "Bash(git tag:*)",
       "Bash(powershell:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(ls:*)"
     ]
   }
 }

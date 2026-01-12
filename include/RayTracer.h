@@ -79,7 +79,13 @@ public:
         // Trace each ray with initial amplitude from beam pattern
         for (const auto& beamRay : beamRays) {
             // Rays now originate from distributed points along the aperture
-            Ray ray(beamRay.origin, beamRay.direction, Ray::LONGITUDINAL);
+            // Determine wave type based on probe configuration:
+            // - Straight beam (wedgeAngle = 0): L-wave propagation
+            // - Angle beam (wedgeAngle != 0): S-wave due to mode conversion at wedge interface
+            Ray::WaveType waveType = (std::abs(transducer.wedgeAngle) < 1e-6) ?
+                Ray::LONGITUDINAL : Ray::SHEAR;
+
+            Ray ray(beamRay.origin, beamRay.direction, waveType);
             ray.amplitude = beamRay.amplitude;  // Set initial amplitude based on beam directivity
 
             // Apply coupling efficiency based on contact condition

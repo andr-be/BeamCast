@@ -15,6 +15,11 @@
 #include <SDL.h>
 #include <SDL_ttf.h>
 
+// ImGui headers
+#include "imgui.h"
+#include "imgui_impl_sdl2.h"
+#include "imgui_impl_sdlrenderer2.h"
+
 #include "MathTypes.h"
 #include "Material.h"
 #include "Geometry.h"
@@ -77,6 +82,19 @@ int main(int argc, char* argv[]) {
         SDL_Quit();
         return EXIT_FAILURE;
     }
+
+    // Initialize Dear ImGui
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable keyboard navigation
+
+    // Setup Dear ImGui style
+    ImGui::StyleColorsDark();
+
+    // Setup Platform/Renderer backends
+    ImGui_ImplSDL2_InitForSDLRenderer(window, sdlRenderer);
+    ImGui_ImplSDLRenderer2_Init(sdlRenderer);
 
     std::cout << "BeamCast UT Simulator initialized successfully" << std::endl;
     std::cout << "Controls:" << std::endl;
@@ -171,7 +189,7 @@ int main(int argc, char* argv[]) {
 
     // Simulation parameters (adjustable at runtime)
     int numRays = 128;
-    double beamSpreadAngle = 20.0;  // degrees
+    float beamSpreadAngle = 20.0f;  // degrees
 
     // Standard UT probe angles (degrees from surface normal)
     const std::vector<double> standardProbeAngles = {0.0, 45.0, 60.0, 70.0};
@@ -205,6 +223,9 @@ int main(int argc, char* argv[]) {
     while (running) {
         // Handle events
         while (SDL_PollEvent(&event)) {
+            // Let ImGui process events first
+            ImGui_ImplSDL2_ProcessEvent(&event);
+
             if (event.type == SDL_QUIT) {
                 running = false;
             }
@@ -624,6 +645,153 @@ int main(int argc, char* argv[]) {
 
         renderer.drawText(std::string("Snap: ") + (snapping.snapEnabled ? "ON" : "OFF"), textX, textY, textCol);
 
+        // Start ImGui frame
+        ImGui_ImplSDLRenderer2_NewFrame();
+        ImGui_ImplSDL2_NewFrame();
+        ImGui::NewFrame();
+
+        // Create left control panel
+        ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(300, 600), ImGuiCond_FirstUseEver);
+        ImGui::Begin("Control Panel", nullptr, ImGuiWindowFlags_NoCollapse);
+
+        // Transducer section
+        if (ImGui::CollapsingHeader("Transducer", ImGuiTreeNodeFlags_DefaultOpen)) {
+            // Probe angle selection
+            const char* angleNames[] = { "0\u00b0 (Straight)", "45\u00b0", "60\u00b0", "70\u00b0" };
+            if (ImGui::Combo("Probe Angle", &currentProbeAngleIndex, angleNames, IM_ARRAYSIZE(angleNames))) {
+                // Update probe angle (same logic as R key)
+                double probeAngleDegrees = standardProbeAngles[currentProbeAngleIndex];
+                transducer.setAngleBeamProbe(probeAngleDegrees);
+
+                if (transducerSnapped) {
+                    SurfaceSnap snap = snapping.findNearestSurface(transducer.position, geometries);
+                    if (snap.found && snap.object) {
+                        double refractedAngle = transducer.calculateRefractedAngle(snap.object->material, false);
+                        if (refractedAngle >= 0.0) {
+                            transducer.beamAngle = refractedAngle;
+                        } else {
+                            transducer.beamAngle = 0.0;
+                        }
+                    }
+                }
+
+                if (autoSimulate) {
+                    rayTracer.traceFromTransducer(transducer, geometries, numRays, beamSpreadAngle);
+                    ascan.generateFromRayPaths(rayTracer.tracedPaths, transducer);
+                    simulationRun = true;
+                }
+            }
+
+            // Frequency
+            float freq = (float)transducer.frequency;
+            if (ImGui::SliderFloat("Frequency (MHz)", &freq, 1.0f, 20.0f, "%.1f")) {
+                transducer.frequency = freq;
+                if (autoSimulate) {
+                    rayTracer.traceFromTransducer(transducer, geometries, numRays, beamSpreadAngle);
+                    ascan.generateFromRayPaths(rayTracer.tracedPaths, transducer);
+                    simulationRun = true;
+                }
+            }
+
+            // Bandwidth
+            float bw = (float)transducer.bandwidth;
+            if (ImGui::SliderFloat("Bandwidth", &bw, 0.1f, 1.0f, "%.2f")) {
+                transducer.bandwidth = bw;
+                if (autoSimulate) {
+                    rayTracer.traceFromTransducer(transducer, geometries, numRays, beamSpreadAngle);
+                    ascan.generateFromRayPaths(rayTracer.tracedPaths, transducer);
+                    simulationRun = true;
+                }
+            }
+
+            // Element diameter
+            float diameter = (float)transducer.elementDiameter;
+            if (ImGui::SliderFloat("Element Diameter (mm)", &diameter, 3.0f, 25.0f, "%.1f")) {
+                transducer.elementDiameter = diameter;
+                if (autoSimulate) {
+                    rayTracer.traceFromTransducer(transducer, geometries, numRays, beamSpreadAngle);
+                    ascan.generateFromRayPaths(rayTracer.tracedPaths, transducer);
+                    simulationRun = true;
+                }
+            }
+        }
+
+        // Ray tracing section
+        if (ImGui::CollapsingHeader("Ray Tracing", ImGuiTreeNodeFlags_DefaultOpen)) {
+            if (ImGui::SliderInt("Ray Count", &numRays, 16, 512)) {
+                if (autoSimulate) {
+                    rayTracer.traceFromTransducer(transducer, geometries, numRays, beamSpreadAngle);
+                    ascan.generateFromRayPaths(rayTracer.tracedPaths, transducer);
+                    simulationRun = true;
+                }
+            }
+
+            if (ImGui::SliderFloat("Beam Spread (deg)", &beamSpreadAngle, 5.0f, 60.0f, "%.1f")) {
+                if (autoSimulate) {
+                    rayTracer.traceFromTransducer(transducer, geometries, numRays, beamSpreadAngle);
+                    ascan.generateFromRayPaths(rayTracer.tracedPaths, transducer);
+                    simulationRun = true;
+                }
+            }
+
+            float threshold = (float)(rayTracer.amplitudeThreshold * 100.0);
+            if (ImGui::SliderFloat("Amp Threshold (%)", &threshold, 0.0f, 10.0f, "%.1f")) {
+                rayTracer.amplitudeThreshold = threshold / 100.0;
+                if (autoSimulate) {
+                    rayTracer.traceFromTransducer(transducer, geometries, numRays, beamSpreadAngle);
+                    ascan.generateFromRayPaths(rayTracer.tracedPaths, transducer);
+                    simulationRun = true;
+                }
+            }
+        }
+
+        // A-scan section
+        if (ImGui::CollapsingHeader("A-Scan Display", ImGuiTreeNodeFlags_DefaultOpen)) {
+            float range = (float)ascan.range;
+            if (ImGui::SliderFloat("Range (us)", &range, 10.0f, 500.0f, "%.1f")) {
+                ascan.range = range;
+            }
+
+            float delay = (float)ascan.delay;
+            if (ImGui::SliderFloat("Delay (us)", &delay, 0.0f, 100.0f, "%.1f")) {
+                ascan.delay = delay;
+            }
+
+            float gain = (float)ascan.gainDB;
+            if (ImGui::SliderFloat("Gain (dB)", &gain, 0.0f, 110.0f, "%.1f")) {
+                ascan.gainDB = gain;
+                if (simulationRun) {
+                    ascan.generateFromRayPaths(rayTracer.tracedPaths, transducer);
+                }
+            }
+
+            // Rectification mode
+            const char* rectModes[] = { "Envelope", "Half-Wave", "RF Mode" };
+            int currentMode = (int)ascan.rectificationMode;
+            if (ImGui::Combo("Mode", &currentMode, rectModes, IM_ARRAYSIZE(rectModes))) {
+                ascan.rectificationMode = (AScan::RectificationMode)currentMode;
+            }
+        }
+
+        // Controls section
+        if (ImGui::CollapsingHeader("Controls", ImGuiTreeNodeFlags_DefaultOpen)) {
+            ImGui::Checkbox("Auto-Simulate", &autoSimulate);
+            ImGui::Checkbox("Snapping", &snapping.snapEnabled);
+
+            if (ImGui::Button("Run Simulation")) {
+                rayTracer.traceFromTransducer(transducer, geometries, numRays, beamSpreadAngle);
+                ascan.generateFromRayPaths(rayTracer.tracedPaths, transducer);
+                simulationRun = true;
+            }
+        }
+
+        ImGui::End();
+
+        // Render ImGui
+        ImGui::Render();
+        ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData());
+
         // Present
         renderer.present();
 
@@ -631,7 +799,12 @@ int main(int argc, char* argv[]) {
         frameCounter++;
     }
 
-    // Cleanup
+    // Cleanup ImGui
+    ImGui_ImplSDLRenderer2_Shutdown();
+    ImGui_ImplSDL2_Shutdown();
+    ImGui::DestroyContext();
+
+    // Cleanup SDL
     SDL_DestroyRenderer(sdlRenderer);
     SDL_DestroyWindow(window);
     TTF_Quit();
