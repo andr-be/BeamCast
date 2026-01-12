@@ -85,7 +85,7 @@ int main(int argc, char* argv[]) {
     std::cout << "  A     = Toggle auto-simulate (currently ON)" << std::endl;
     std::cout << "  S     = Toggle snapping (currently ON)" << std::endl;
     std::cout << "  DRAG  = Click and drag transducer or geometry" << std::endl;
-    std::cout << "  R     = Cycle probe angle (0, 45, 60, 70 deg)" << std::endl;
+    std::cout << "  R     = Rotate: probe angles OR last dragged object (15 deg)" << std::endl;
     std::cout << "  MOUSE WHEEL = Zoom in/out" << std::endl;
     std::cout << "  MIDDLE MOUSE = Pan view (drag)" << std::endl;
     std::cout << "\nSimulation Controls:" << std::endl;
@@ -176,6 +176,7 @@ int main(int argc, char* argv[]) {
     bool isDragging = false;
     bool draggingTransducer = false;
     int draggingGeometryIndex = -1;
+    int lastDraggedGeometryIndex = -1;  // Track last dragged object for rotation
     Vec2 dragOffset(0, 0);
     bool transducerSnapped = false;  // Track if transducer is currently snapped to surface
 
@@ -229,39 +230,60 @@ int main(int argc, char* argv[]) {
                     std::cout << "Snapping: " << (snapping.snapEnabled ? "ON" : "OFF") << std::endl;
                 }
                 else if (event.key.keysym.sym == SDLK_r) {
-                    // Cycle through standard probe angles (0°, 45°, 60°, 70°) - works anytime
-                    currentProbeAngleIndex = (currentProbeAngleIndex + 1) % standardProbeAngles.size();
-                    double probeAngleDegrees = standardProbeAngles[currentProbeAngleIndex];
+                    // R key rotates transducer (cycles standard angles) OR last dragged geometry (15° increments)
+                    if (lastDraggedGeometryIndex >= 0 && lastDraggedGeometryIndex < (int)geometries.size()) {
+                        // Rotate last dragged geometry by 15° increments
+                        constexpr double ROTATION_INCREMENT_DEG = 15.0;
+                        auto* rect = dynamic_cast<BeamCast::Rectangle*>(geometries[lastDraggedGeometryIndex].get());
+                        if (rect) {
+                            rect->rotation += Math::toRadians(ROTATION_INCREMENT_DEG);
+                            // Normalize to [0, 2π)
+                            while (rect->rotation >= 2.0 * M_PI) rect->rotation -= 2.0 * M_PI;
 
-                    // If transducer is snapped to a surface, apply rotation relative to surface
-                    // Otherwise, just set absolute angle (0° = pointing up, 180° = pointing down)
-                    if (transducerSnapped) {
-                        // Get current surface snap to determine surface orientation
-                        SurfaceSnap snap = snapping.findNearestSurface(transducer.position, geometries);
-                        if (snap.found) {
-                            // Calculate inward direction (perpendicular to surface, into material)
-                            Vec2 inwardDir = snap.surfaceNormal * -1.0;
+                            std::cout << "Geometry rotation: " << Math::toDegrees(rect->rotation) << " deg" << std::endl;
 
-                            // Base angle points inward (perpendicular to surface)
-                            // Using same formula as snapping: Vec2(0,1).rotated(angle) = inwardDir
-                            double baseAngle = std::atan2(-inwardDir.x, inwardDir.y);
-
-                            // Apply probe angle offset from surface normal
-                            // Positive angle = clockwise from inward normal (standard UT convention)
-                            transducer.angle = baseAngle + Math::toRadians(probeAngleDegrees);
+                            if (autoSimulate) {
+                                rayTracer.traceFromTransducer(transducer, geometries, numRays, beamSpreadAngle);
+                                ascan.generateFromRayPaths(rayTracer.tracedPaths, transducer);
+                                simulationRun = true;
+                            }
                         }
                     } else {
-                        // Not snapped: set absolute angle (0° = up, 180° = down)
-                        transducer.angle = Math::toRadians(probeAngleDegrees);
-                    }
+                        // No geometry recently dragged - rotate transducer
+                        // Cycle through standard probe angles (0°, 45°, 60°, 70°)
+                        currentProbeAngleIndex = (currentProbeAngleIndex + 1) % standardProbeAngles.size();
+                        double probeAngleDegrees = standardProbeAngles[currentProbeAngleIndex];
 
-                    if (autoSimulate) {
-                        rayTracer.traceFromTransducer(transducer, geometries, numRays, beamSpreadAngle);
-                        ascan.generateFromRayPaths(rayTracer.tracedPaths, transducer);
-                        simulationRun = true;
+                        // If transducer is snapped to a surface, apply rotation relative to surface
+                        // Otherwise, just set absolute angle (0° = pointing up, 180° = pointing down)
+                        if (transducerSnapped) {
+                            // Get current surface snap to determine surface orientation
+                            SurfaceSnap snap = snapping.findNearestSurface(transducer.position, geometries);
+                            if (snap.found) {
+                                // Calculate inward direction (perpendicular to surface, into material)
+                                Vec2 inwardDir = snap.surfaceNormal * -1.0;
+
+                                // Base angle points inward (perpendicular to surface)
+                                // Using same formula as snapping: Vec2(0,1).rotated(angle) = inwardDir
+                                double baseAngle = std::atan2(-inwardDir.x, inwardDir.y);
+
+                                // Apply probe angle offset from surface normal
+                                // Positive angle = clockwise from inward normal (standard UT convention)
+                                transducer.angle = baseAngle + Math::toRadians(probeAngleDegrees);
+                            }
+                        } else {
+                            // Not snapped: set absolute angle (0° = up, 180° = down)
+                            transducer.angle = Math::toRadians(probeAngleDegrees);
+                        }
+
+                        if (autoSimulate) {
+                            rayTracer.traceFromTransducer(transducer, geometries, numRays, beamSpreadAngle);
+                            ascan.generateFromRayPaths(rayTracer.tracedPaths, transducer);
+                            simulationRun = true;
+                        }
+                        std::cout << "Probe angle: " << probeAngleDegrees << " deg (" <<
+                            (probeAngleDegrees == 0.0 ? "straight beam" : "angle beam") << ")" << std::endl;
                     }
-                    std::cout << "Probe angle: " << probeAngleDegrees << "° (" <<
-                        (probeAngleDegrees == 0.0 ? "straight beam" : "angle beam") << ")" << std::endl;
                 }
                 // Ray count controls
                 else if (event.key.keysym.sym == SDLK_LEFTBRACKET) {
@@ -350,6 +372,7 @@ int main(int argc, char* argv[]) {
                         isDragging = true;
                         draggingTransducer = true;
                         dragOffset = transducer.position - mouseWorld;
+                        lastDraggedGeometryIndex = -1;  // Reset so R rotates transducer
                         std::cout << "Dragging transducer" << std::endl;
                     } else {
                         // Check if clicking on geometry
@@ -375,6 +398,10 @@ int main(int argc, char* argv[]) {
                 if (event.button.button == SDL_BUTTON_LEFT) {
                     isDragging = false;
                     draggingTransducer = false;
+                    // Remember last dragged geometry for rotation
+                    if (draggingGeometryIndex >= 0) {
+                        lastDraggedGeometryIndex = draggingGeometryIndex;
+                    }
                     draggingGeometryIndex = -1;
                 }
                 else if (event.button.button == SDL_BUTTON_MIDDLE) {
