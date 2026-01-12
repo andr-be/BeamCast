@@ -98,11 +98,13 @@ void Renderer::drawTransducer(const Transducer& transducer, int screenW, int scr
 }
 
 void Renderer::drawRaySegment(const RaySegment& segment, int screenW, int screenH) {
-    // Color based on amplitude (fades with weaker rays)
-    // Use lower base opacity (30-50%) to prevent swamping
-    uint8_t baseAlpha = 80;  // 30% base opacity
-    uint8_t maxAlpha = 180;  // 70% max opacity
-    uint8_t alpha = baseAlpha + (uint8_t)(segment.amplitude * (maxAlpha - baseAlpha));
+    // Opacity scales more dramatically with amplitude so threshold is meaningful
+    // Use quadratic scaling: weak rays (near threshold) are very faint
+    // Strong rays (near 100%) are bright and visible
+    double amplitudeSquared = segment.amplitude * segment.amplitude;
+    uint8_t minAlpha = 20;   // 8% min opacity (very faint)
+    uint8_t maxAlpha = 200;  // 78% max opacity
+    uint8_t alpha = minAlpha + (uint8_t)(amplitudeSquared * (maxAlpha - minAlpha));
 
     Color rayColor = (segment.waveType == Ray::LONGITUDINAL) ?
         Color(100, 200, 255, alpha) :  // Blue for L-waves

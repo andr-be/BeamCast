@@ -78,11 +78,16 @@ public:
             Ray ray(transducer.position, beamRay.direction, Ray::LONGITUDINAL);
             ray.amplitude = beamRay.amplitude;  // Set initial amplitude based on beam directivity
 
-            // If transducer is inside geometry (snapped), apply coupling efficiency
-            // For MVP: Simple model - coupling reduces initial amplitude
+            // Apply coupling efficiency based on contact condition
             if (insideGeometry) {
-                constexpr double COUPLING_EFFICIENCY = 0.95;  // 95% transmission (5% loss at interface)
+                // Good contact: 95% transmission (5% loss at interface)
+                constexpr double COUPLING_EFFICIENCY = 0.95;
                 ray.amplitude *= COUPLING_EFFICIENCY;
+            } else {
+                // Free air: Very poor acoustic coupling (~0.1% typical for air gap)
+                // This simulates the practical reality that UT requires good coupling
+                constexpr double AIR_COUPLING_EFFICIENCY = 0.001;  // 0.1% - most energy reflects at transducer face
+                ray.amplitude *= AIR_COUPLING_EFFICIENCY;
             }
 
             traceRay(ray, geometries, 0, startingMedium);

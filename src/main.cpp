@@ -85,7 +85,7 @@ int main(int argc, char* argv[]) {
     std::cout << "  A     = Toggle auto-simulate (currently ON)" << std::endl;
     std::cout << "  S     = Toggle snapping (currently ON)" << std::endl;
     std::cout << "  DRAG  = Click and drag transducer or geometry" << std::endl;
-    std::cout << "  R (while dragging transducer) = Cycle probe angle (0\u00b0, 45\u00b0, 60\u00b0, 70\u00b0)" << std::endl;
+    std::cout << "  R (while dragging transducer) = Cycle probe angle (0, 45, 60, 70 deg)" << std::endl;
     std::cout << "  MOUSE WHEEL = Zoom in/out" << std::endl;
     std::cout << "\nSimulation Controls:" << std::endl;
     std::cout << "  [/]   = Decrease/Increase ray count" << std::endl;
@@ -277,7 +277,7 @@ int main(int argc, char* argv[]) {
                 // Beam spread controls
                 else if (event.key.keysym.sym == SDLK_MINUS) {
                     beamSpreadAngle = std::max(5.0, beamSpreadAngle - 5.0);
-                    std::cout << "Beam spread: ±" << beamSpreadAngle << "°" << std::endl;
+                    std::cout << "Beam spread: ±" << beamSpreadAngle << " deg" << std::endl;
                     if (autoSimulate && simulationRun) {
                         rayTracer.traceFromTransducer(transducer, geometries, numRays, beamSpreadAngle);
                         ascan.generateFromRayPaths(rayTracer.tracedPaths, transducer);
@@ -285,7 +285,7 @@ int main(int argc, char* argv[]) {
                 }
                 else if (event.key.keysym.sym == SDLK_EQUALS) {
                     beamSpreadAngle = std::min(90.0, beamSpreadAngle + 5.0);
-                    std::cout << "Beam spread: ±" << beamSpreadAngle << "°" << std::endl;
+                    std::cout << "Beam spread: ±" << beamSpreadAngle << " deg" << std::endl;
                     if (autoSimulate && simulationRun) {
                         rayTracer.traceFromTransducer(transducer, geometries, numRays, beamSpreadAngle);
                         ascan.generateFromRayPaths(rayTracer.tracedPaths, transducer);
@@ -473,7 +473,7 @@ int main(int argc, char* argv[]) {
         renderer.drawText("Rays: " + std::to_string(numRays), textX, textY, textCol);
         textY += lineHeight;
 
-        renderer.drawText("Beam: ±" + std::to_string((int)beamSpreadAngle) + "°", textX, textY, textCol);
+        renderer.drawText("Beam: ±" + std::to_string((int)beamSpreadAngle) + " deg", textX, textY, textCol);
         textY += lineHeight;
 
         char ampBuf[32];
@@ -482,7 +482,7 @@ int main(int argc, char* argv[]) {
         textY += lineHeight;
 
         char rangeBuf[32];
-        std::snprintf(rangeBuf, sizeof(rangeBuf), "A-scan: %.0f μs", ascan.range);
+        std::snprintf(rangeBuf, sizeof(rangeBuf), "A-scan: %.0f us", ascan.range);
         renderer.drawText(rangeBuf, textX, textY, textCol);
         textY += lineHeight;
 
