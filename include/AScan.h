@@ -4,6 +4,7 @@
 #include "RayTracer.h"
 #include <vector>
 #include <algorithm>
+#include <cmath>
 
 namespace BeamCast {
 
@@ -25,13 +26,27 @@ public:
     // Display settings
     double range;        // Maximum time displayed (μs)
     double delay;        // Start time offset (μs)
-    double gain;         // Overall amplitude multiplier
+    double gainDB;       // Gain in decibels (0-80 dB typical)
+
+    // Display modes
+    enum RectificationMode {
+        ENVELOPE,        // Full rectified envelope (current display)
+        HALF_WAVE,       // Half-wave rectified (positive only)
+        RF_MODE          // Full RF waveform (±100% bipolar)
+    };
+    RectificationMode rectificationMode;
 
     AScan()
         : range(200.0)   // 200μs default range - covers longer path lengths
         , delay(0.0)
-        , gain(1.0)
+        , gainDB(40.0)   // 40 dB default gain (linear multiplier: 100x)
+        , rectificationMode(ENVELOPE)
     {}
+
+    // Convert gain from dB to linear multiplier
+    double getGainLinear() const {
+        return std::pow(10.0, gainDB / 20.0);
+    }
 
     // Extract echoes from traced ray paths
     // Only records echoes where reflected rays return to transducer (pulse-echo mode)
@@ -139,7 +154,11 @@ public:
                                 double receiveAngleCos = std::abs(incomingDir.dot(transducerNormal));
 
                                 constexpr double MIN_ECHO_AMPLITUDE = 0.01;
-                                double echoAmplitude = seg->amplitude * gain * receiveAngleCos;
+                                double gainLinear = getGainLinear();
+                                double echoAmplitude = seg->amplitude * gainLinear * receiveAngleCos;
+
+                                // Saturation at 100% FSH (Full Screen Height)
+                                echoAmplitude = std::min(1.0, echoAmplitude);
 
                                 if (echoAmplitude > MIN_ECHO_AMPLITUDE) {
                                     echoes.emplace_back(totalTOF, echoAmplitude, reflectionPoint, seg->waveType);

@@ -146,9 +146,6 @@ void Renderer::drawAScan(const AScan& ascan, int x, int y, int width, int height
     SDL_RenderDrawLine(sdlRenderer, x, y + height - 1, x + width, y + height - 1);
 
     // Draw echoes as vertical lines (envelope mode)
-    Color echoColor = Color(100, 255, 100, 255);  // Green
-    SDL_SetRenderDrawColor(sdlRenderer, echoColor.r, echoColor.g, echoColor.b, echoColor.a);
-
     for (const auto& echo : ascan.echoes) {
         // Convert time to X position
         double normalizedTime = (echo.timeOfFlight - ascan.delay) / ascan.range;
@@ -160,6 +157,11 @@ void Renderer::drawAScan(const AScan& ascan, int x, int y, int width, int height
         double clampedAmp = std::min(1.0, echo.amplitude);
         int echoHeight = (int)(clampedAmp * height * AScanDisplay::MAX_AMPLITUDE_DISPLAY_FRACTION);
         int echoY = y + height - echoHeight;
+
+        // Color: Green for normal echoes, Red for saturated (100% FSH)
+        bool isSaturated = (echo.amplitude >= 0.99);  // Consider 99%+ as saturated
+        Color echoColor = isSaturated ? Color(255, 100, 100, 255) : Color(100, 255, 100, 255);
+        SDL_SetRenderDrawColor(sdlRenderer, echoColor.r, echoColor.g, echoColor.b, echoColor.a);
 
         // Draw vertical line for echo
         SDL_RenderDrawLine(sdlRenderer, echoX, y + height - 1, echoX, echoY);

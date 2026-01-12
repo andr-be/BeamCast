@@ -40,3 +40,8 @@ lib/SDL2_ttf/
 .DS_Store
 Thumbs.db
 nul
+
+# Reference images (optional - track annotations, images optional)
+# Uncomment to exclude large image files:
+# reference/*.jpg
+# reference/*.png

@@ -1,4 +1,5 @@
 #include <iostream>
+#include <iomanip>
 #include <cstdlib>
 #include <cmath>
 #include <vector>
@@ -94,6 +95,7 @@ int main(int argc, char* argv[]) {
     std::cout << "  -/=   = Decrease/Increase beam spread angle" << std::endl;
     std::cout << "  ,/.   = Decrease/Increase amplitude threshold" << std::endl;
     std::cout << "  1/2   = Decrease/Increase A-scan range" << std::endl;
+    std::cout << "  3/4   = Decrease/Increase A-scan gain (dB)" << std::endl;
 
     // Create our renderer wrapper
     Renderer renderer(sdlRenderer);
@@ -364,6 +366,25 @@ int main(int argc, char* argv[]) {
                         rayTracer.traceFromTransducer(transducer, geometries, numRays, beamSpreadAngle);
                         ascan.generateFromRayPaths(rayTracer.tracedPaths, transducer);
                         simulationRun = true;
+                    }
+                }
+                // A-scan gain controls
+                else if (event.key.keysym.sym == SDLK_3) {
+                    ascan.gainDB = std::max(0.0, ascan.gainDB - 2.0);  // 2 dB decrements
+                    std::cout << "A-scan gain: " << ascan.gainDB << " dB (x"
+                              << std::fixed << std::setprecision(1) << ascan.getGainLinear() << ")" << std::endl;
+                    // Re-generate A-scan with new gain
+                    if (simulationRun) {
+                        ascan.generateFromRayPaths(rayTracer.tracedPaths, transducer);
+                    }
+                }
+                else if (event.key.keysym.sym == SDLK_4) {
+                    ascan.gainDB = std::min(80.0, ascan.gainDB + 2.0);  // 2 dB increments, max 80 dB
+                    std::cout << "A-scan gain: " << ascan.gainDB << " dB (x"
+                              << std::fixed << std::setprecision(1) << ascan.getGainLinear() << ")" << std::endl;
+                    // Re-generate A-scan with new gain
+                    if (simulationRun) {
+                        ascan.generateFromRayPaths(rayTracer.tracedPaths, transducer);
                     }
                 }
             }
