@@ -11,7 +11,9 @@ namespace BeamCast {
 class Transducer {
 public:
     Vec2 position;           // Center position (mm)
-    double angle;            // Angle in radians (0 = pointing up/+Y)
+    double angle;            // Aperture orientation in radians (0 = horizontal, perpendicular to +Y)
+    double beamAngle;        // Beam steering angle relative to aperture normal (radians)
+                             // 0 = perpendicular to aperture, positive = clockwise from normal
     double frequency;        // Center frequency (MHz)
     double bandwidth;        // Fractional bandwidth (e.g., 0.5 for 50%)
     double elementDiameter;  // Probe element diameter (mm)
@@ -28,7 +30,8 @@ public:
 
     Transducer()
         : position(0, -60)   // Default below geometry
-        , angle(0.0)         // Pointing up
+        , angle(0.0)         // Aperture horizontal
+        , beamAngle(0.0)     // Beam perpendicular to aperture (pointing up)
         , frequency(5.0)     // 5 MHz
         , bandwidth(0.5)     // 50% bandwidth
         , elementDiameter(12.0)  // 12mm diameter
@@ -39,6 +42,7 @@ public:
     Transducer(const Vec2& pos, double angleRad, double freq = 5.0)
         : position(pos)
         , angle(angleRad)
+        , beamAngle(0.0)     // Default: beam perpendicular to aperture
         , frequency(freq)
         , bandwidth(0.5)
         , elementDiameter(12.0)
@@ -46,33 +50,43 @@ public:
         , beamModel(POINT_SOURCE)
     {}
 
-    // Get the direction vector the transducer is pointing
-    Vec2 getDirection() const {
-        // Angle 0 points up (+Y), rotates counter-clockwise
+    // Get the aperture normal direction (perpendicular to aperture face)
+    // This is the direction perpendicular to the line segment
+    Vec2 getApertureNormal() const {
+        // Angle 0 = horizontal aperture, normal points up (+Y)
         return Vec2(0, 1).rotated(angle);
     }
 
+    // Get the beam direction (may be steered relative to aperture normal)
+    // This is the direction the ultrasound beam propagates
+    Vec2 getDirection() const {
+        Vec2 normal = getApertureNormal();
+        // Positive beamAngle rotates clockwise from normal (standard NDT convention)
+        return normal.rotated(beamAngle);
+    }
+
     // Get the transducer element as a line segment (aperture face)
-    // Returns the two endpoints of the line segment perpendicular to beam direction
+    // Returns the two endpoints of the line segment perpendicular to aperture normal
+    // The aperture orientation is fixed (stays aligned with surface)
     void getApertureSegment(Vec2& p1, Vec2& p2) const {
-        Vec2 dir = getDirection();
-        Vec2 perpendicular = dir.perpendicular();  // Perpendicular to beam direction
+        Vec2 normal = getApertureNormal();  // Aperture normal (perpendicular to face)
+        Vec2 perpendicular = normal.perpendicular();  // Direction along the aperture
         double halfWidth = elementDiameter / 2.0;
         p1 = position - perpendicular * halfWidth;
         p2 = position + perpendicular * halfWidth;
     }
 
-    // Get left endpoint of aperture (looking along beam direction)
+    // Get left endpoint of aperture (looking along aperture normal)
     Vec2 getApertureLeft() const {
-        Vec2 dir = getDirection();
-        Vec2 perpendicular = dir.perpendicular();
+        Vec2 normal = getApertureNormal();
+        Vec2 perpendicular = normal.perpendicular();
         return position - perpendicular * (elementDiameter / 2.0);
     }
 
-    // Get right endpoint of aperture (looking along beam direction)
+    // Get right endpoint of aperture (looking along aperture normal)
     Vec2 getApertureRight() const {
-        Vec2 dir = getDirection();
-        Vec2 perpendicular = dir.perpendicular();
+        Vec2 normal = getApertureNormal();
+        Vec2 perpendicular = normal.perpendicular();
         return position + perpendicular * (elementDiameter / 2.0);
     }
 

@@ -259,30 +259,17 @@ int main(int argc, char* argv[]) {
                         }
                     } else {
                         // R: Cycle through standard probe angles (0°, 45°, 60°, 70°)
+                        // This changes the BEAM ANGLE, not the aperture orientation
                         currentProbeAngleIndex = (currentProbeAngleIndex + 1) % standardProbeAngles.size();
                         double probeAngleDegrees = standardProbeAngles[currentProbeAngleIndex];
 
-                        // If transducer is snapped to a surface, apply rotation relative to surface
-                        // Otherwise, just set absolute angle (0° = pointing up, 180° = pointing down)
-                        if (transducerSnapped) {
-                            // Get current surface snap to determine surface orientation
-                            SurfaceSnap snap = snapping.findNearestSurface(transducer.position, geometries);
-                            if (snap.found) {
-                                // Calculate inward direction (perpendicular to surface, into material)
-                                Vec2 inwardDir = snap.surfaceNormal * -1.0;
+                        // Set beam steering angle relative to aperture normal
+                        // In NDT: 0° = straight beam (perpendicular), 45°/60°/70° = angle beam
+                        // Aperture stays aligned with surface, beam steers at an angle
+                        transducer.beamAngle = Math::toRadians(probeAngleDegrees);
 
-                                // Base angle points inward (perpendicular to surface)
-                                // Using same formula as snapping: Vec2(0,1).rotated(angle) = inwardDir
-                                double baseAngle = std::atan2(-inwardDir.x, inwardDir.y);
-
-                                // Apply probe angle offset from surface normal
-                                // Positive angle = clockwise from inward normal (standard UT convention)
-                                transducer.angle = baseAngle + Math::toRadians(probeAngleDegrees);
-                            }
-                        } else {
-                            // Not snapped: set absolute angle (0° = up, 180° = down)
-                            transducer.angle = Math::toRadians(probeAngleDegrees);
-                        }
+                        // Note: Aperture orientation (transducer.angle) is managed by snapping system
+                        // and stays aligned with the surface. We only change the beam direction here.
 
                         if (autoSimulate) {
                             rayTracer.traceFromTransducer(transducer, geometries, numRays, beamSpreadAngle);
