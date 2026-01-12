@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(test:*)",
+      "Bash(powershell -ExecutionPolicy Bypass -File setup_sdl2.ps1)",
+      "Bash(cmake:*)",
+      "Bash(start BeamCast.exe)",
+      "Bash(powershell -ExecutionPolicy Bypass -File setup_sdl2_ttf.ps1)",
+      "Bash(curl:*)",
+      "Bash(timeout:*)",
+      "Bash(taskkill:*)",
+      "Bash(start buildbinReleaseBeamCast.exe)",
+      "Bash(start \"build/bin/Release/BeamCast.exe\")",
+      "Bash(start \"BeamCast\" \"build/bin/Release/BeamCast.exe\")",
+      "Bash(tree:*)",
+      "Bash(wc:*)",
+      "Bash(du:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}
