@@ -46,7 +46,7 @@ public:
     Material couplingMedium;               // Medium between transducer and geometry (usually air or water)
 
     RayTracer()
-        : amplitudeThreshold(0.0)   // 0% = trace everything (let A-scan time window control cutoff)
+        : amplitudeThreshold(0.01)  // 1% default threshold
         , maxTimeOfFlight(200.0)    // 200μs default (matches A-scan default range)
         , maxBounces(50)             // Increased from 10 since we now have time cutoff
         , couplingMedium(Materials::Air())

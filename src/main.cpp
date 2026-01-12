@@ -85,7 +85,8 @@ int main(int argc, char* argv[]) {
     std::cout << "  A     = Toggle auto-simulate (currently ON)" << std::endl;
     std::cout << "  S     = Toggle snapping (currently ON)" << std::endl;
     std::cout << "  DRAG  = Click and drag transducer or geometry" << std::endl;
-    std::cout << "  R     = Rotate: probe angles OR last dragged object (15 deg)" << std::endl;
+    std::cout << "  R         = Cycle probe angle (0, 45, 60, 70 deg)" << std::endl;
+    std::cout << "  SHIFT+R   = Rotate last dragged object (15 deg)" << std::endl;
     std::cout << "  MOUSE WHEEL = Zoom in/out" << std::endl;
     std::cout << "  MIDDLE MOUSE = Pan view (drag)" << std::endl;
     std::cout << "\nSimulation Controls:" << std::endl;
@@ -230,9 +231,11 @@ int main(int argc, char* argv[]) {
                     std::cout << "Snapping: " << (snapping.snapEnabled ? "ON" : "OFF") << std::endl;
                 }
                 else if (event.key.keysym.sym == SDLK_r) {
-                    // R key rotates transducer (cycles standard angles) OR last dragged geometry (15° increments)
-                    if (lastDraggedGeometryIndex >= 0 && lastDraggedGeometryIndex < (int)geometries.size()) {
-                        // Rotate last dragged geometry by 15° increments
+                    SDL_Keymod modifiers = SDL_GetModState();
+                    bool shiftPressed = (modifiers & KMOD_SHIFT) != 0;
+
+                    if (shiftPressed && lastDraggedGeometryIndex >= 0 && lastDraggedGeometryIndex < (int)geometries.size()) {
+                        // Shift+R: Rotate last dragged geometry by 15° increments
                         constexpr double ROTATION_INCREMENT_DEG = 15.0;
                         auto* rect = dynamic_cast<BeamCast::Rectangle*>(geometries[lastDraggedGeometryIndex].get());
                         if (rect) {
@@ -249,8 +252,7 @@ int main(int argc, char* argv[]) {
                             }
                         }
                     } else {
-                        // No geometry recently dragged - rotate transducer
-                        // Cycle through standard probe angles (0°, 45°, 60°, 70°)
+                        // R: Cycle through standard probe angles (0°, 45°, 60°, 70°)
                         currentProbeAngleIndex = (currentProbeAngleIndex + 1) % standardProbeAngles.size();
                         double probeAngleDegrees = standardProbeAngles[currentProbeAngleIndex];
 
@@ -321,7 +323,7 @@ int main(int argc, char* argv[]) {
                 }
                 // Amplitude threshold controls
                 else if (event.key.keysym.sym == SDLK_COMMA) {
-                    rayTracer.amplitudeThreshold = std::max(0.01, rayTracer.amplitudeThreshold - 0.05);
+                    rayTracer.amplitudeThreshold = std::max(0.0, rayTracer.amplitudeThreshold - 0.01);
                     std::cout << "Amplitude threshold: " << (rayTracer.amplitudeThreshold * 100) << "%" << std::endl;
                     if (autoSimulate && simulationRun) {
                         rayTracer.traceFromTransducer(transducer, geometries, numRays, beamSpreadAngle);
@@ -329,7 +331,7 @@ int main(int argc, char* argv[]) {
                     }
                 }
                 else if (event.key.keysym.sym == SDLK_PERIOD) {
-                    rayTracer.amplitudeThreshold = std::min(1.0, rayTracer.amplitudeThreshold + 0.05);
+                    rayTracer.amplitudeThreshold = std::min(1.0, rayTracer.amplitudeThreshold + 0.01);
                     std::cout << "Amplitude threshold: " << (rayTracer.amplitudeThreshold * 100) << "%" << std::endl;
                     if (autoSimulate && simulationRun) {
                         rayTracer.traceFromTransducer(transducer, geometries, numRays, beamSpreadAngle);
@@ -372,7 +374,6 @@ int main(int argc, char* argv[]) {
                         isDragging = true;
                         draggingTransducer = true;
                         dragOffset = transducer.position - mouseWorld;
-                        lastDraggedGeometryIndex = -1;  // Reset so R rotates transducer
                         std::cout << "Dragging transducer" << std::endl;
                     } else {
                         // Check if clicking on geometry
